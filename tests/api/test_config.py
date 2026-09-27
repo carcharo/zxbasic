@@ -46,6 +46,7 @@ class TestConfig(unittest.TestCase):
         self.assertIsNone(config.OPTIONS.architecture)
         self.assertEqual(config.OPTIONS.expected_warnings, 0)
         self.assertEqual(config.OPTIONS.opt_strategy, "auto")
+        self.assertEqual(config.OPTIONS.cli_overrides, frozenset())
 
         # private options that cannot be accessed with #pragma
         self.assertEqual(config.OPTIONS["__DEFINES"].value, {})
@@ -61,6 +62,7 @@ class TestConfig(unittest.TestCase):
             config.OPTION.CHECK_ARRAYS,
             config.OPTION.AUTORUN,
             config.OPTION.CASE_INS,
+            config.OPTION.CLI_OVERRIDES,
             config.OPTION.DEBUG,
             config.OPTION.DEFAULT_BYREF,
             config.OPTION.EMIT_BACKEND,

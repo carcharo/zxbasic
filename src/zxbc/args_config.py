@@ -88,6 +88,21 @@ def parse_options(args: list[str] | None = None) -> Namespace:
         OPTIONS.heap_address if options.heap_address is None else src.api.utils.parse_int(options.heap_address)
     )
 
+    # Remember which memory-layout options were explicitly given on the
+    # command line, as opposed to only carrying a backend's
+    # ADD_IF_NOT_DEFINED default: a target arch's backend, re-initialized
+    # after this point with the user's --arch, can use this to tell the two
+    # cases apart.
+    OPTIONS.cli_overrides = frozenset(
+        name
+        for name, given in (
+            ("org", options.org),
+            ("heap_size", options.heap_size),
+            ("heap_address", options.heap_address),
+        )
+        if given is not None
+    )
+
     if options.defines:
         for i in options.defines:
             macro = list(i.split("=", 1))

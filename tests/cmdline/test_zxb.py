@@ -114,3 +114,35 @@ def test_dash_d_arch_macro_still_works_without_warnings(file_bas, file_bin):
         assert "__ZX81SD__" in zxbc.OPTIONS["__DEFINES"].value
         assert global_.has_warnings == warnings_before, "-D __ZX81SD__ should not warn"
 
+
+def test_cli_overrides_defaults_to_empty(file_bas, file_bin):
+    """When none of --org, --heap-size or --heap-address are given, no
+    memory-layout option should be recorded as coming from the CLI."""
+    with EnsureRemoveFile(file_bin):
+        zxbc.main(["--parse-only", file_bas, "-o", file_bin])
+        assert zxbc.OPTIONS.cli_overrides == frozenset()
+
+
+def test_cli_overrides_records_org_heap_size_and_heap_address(file_bas, file_bin):
+    with EnsureRemoveFile(file_bin):
+        zxbc.main(
+            [
+                "--parse-only",
+                "--org",
+                "0xC000",
+                "--heap-size",
+                "100",
+                "--heap-address",
+                "0x9000",
+                file_bas,
+                "-o",
+                file_bin,
+            ]
+        )
+        assert zxbc.OPTIONS.cli_overrides == frozenset({"org", "heap_size", "heap_address"})
+
+
+def test_cli_overrides_only_records_options_actually_given(file_bas, file_bin):
+    with EnsureRemoveFile(file_bin):
+        zxbc.main(["--parse-only", "--org", "0xC000", file_bas, "-o", file_bin])
+        assert zxbc.OPTIONS.cli_overrides == frozenset({"org"})
