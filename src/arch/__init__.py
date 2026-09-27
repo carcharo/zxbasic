@@ -14,6 +14,7 @@ __all__ = (
     "zx48k",
     "zxnext",
     "zx81sd",
+    "cpc",
 )
 
 AVAILABLE_ARCHITECTURES = __all__
@@ -26,6 +27,7 @@ target: ModuleType
 # followed too. See src.zxbpp.zxbpp.set_include_path().
 ARCH_PARENTS: dict[str, str] = {
     "zx81sd": "zx48k",
+    "cpc": "zx48k",
 }
 
 

@@ -47,9 +47,9 @@ def test_arch_zx81sd_defines_zx81sd_macro(file_bas, tmp_path):
 
 
 def test_arch_parents_declares_zx81sd_inherits_zx48k():
-    """zx81sd is the architecture that inherits another one's
+    """zx81sd and cpc are the architectures that inherit another one's
     stdlib/runtime include search path."""
-    assert arch.ARCH_PARENTS == {"zx81sd": "zx48k"}
+    assert arch.ARCH_PARENTS == {"zx81sd": "zx48k", "cpc": "zx48k"}
 
 
 def test_set_include_path_zx81sd_inherits_zx48k_unchanged():
