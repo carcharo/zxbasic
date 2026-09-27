@@ -1,10 +1,11 @@
 ; Sets paper color in ATTR_P permanently
 ; Parameter: Paper color in A register
 ;
-; Amstrad CPC: only touches ATTR_P/ATTR_T by name (no ROM/HW), kept
-; byte-for-byte identical to zx48k's since sysvars.asm already relocates
-; those names.
+; Amstrad CPC: byte-for-byte zx48k's version for the permanent entry
+; (PAPER). PAPER_TMP additionally pushes the new pen to the firmware
+; right away, via __SET_ATTR_MODE -- see ink.asm's header for why.
 
+#include once <copy_attr.asm>
 #include once <sysvars.asm>
 
     push namespace core
@@ -44,10 +45,12 @@ __SET_PAPER2:
     ret
 
 
-; Sets the PAPER color passed in A register in the ATTR_T variable
+; Sets the PAPER color passed in A register in the ATTR_T variable, and
+; pushes it to the firmware right away (see the file header).
 PAPER_TMP:
     ld de, ATTR_T
-    jp __SET_PAPER
+    call __SET_PAPER
+    jp __SET_ATTR_MODE
     ENDP
 
     pop namespace

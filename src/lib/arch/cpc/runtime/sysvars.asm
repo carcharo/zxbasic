@@ -9,49 +9,121 @@
 ; .core.CPC_PRIV_BASE / CPC_PRIV_SIZE, emitted as EQUs by
 ; src/arch/cpc/backend/main.py's prologue).
 ;
-; This file only defines the *names and offsets*; CPC_INIT_SYSVARS
+; This file only defines the *names and offsets*; CPC_INIT_00_BOOTSTRAP
 ; (bootstrap.asm) fills them in at runtime.
 ;
 ; Layout ($9E00 + offset), all byte offsets from SYSVAR_BASE:
 ;
 ;   Offset  Size  Name               Note
 ;   ------  ----  -----------------  ---------------------------------
-;   $00     2     CHARS              pointer to charset (8x8 cells)
-;   $02     2     UDG                pointer to UDG charset
+;   $00     2     CHARS              pointer to charset (8x8 cells);
+;                                     unused by print.asm now (the
+;                                     firmware draws its own glyphs) but
+;                                     kept for zx48k source parity
+;   $02     2     UDG                pointer to UDG charset (ditto)
 ;   $04     2     COORDS             last PLOT/graphics coords (X,Y)
-;   $06     1     FLAGS2             screen flags (OVER/INVERSE/etc.)
+;   $06     1     FLAGS2             screen flags (OVER/BOLD/ITALIC)
 ;   $07     1     ECHO_E             reserved, unused for now
-;   $08     2     DFCC               next screen bitmap addr for PRINT
-;   $0A     2     DFCCL              next screen attr addr for PRINT
-;   $0C     2     S_POSN             cursor position (H=row, L=column)
+;   $08     2     DFCC               unused by print.asm now (no VRAM
+;                                     pointer to track -- the firmware
+;                                     owns screen addressing); kept so
+;                                     any stray reference still assembles
+;   $0A     2     DFCCL              ditto, unused
+;   $0C     2     S_POSN             vestigial: __LOAD_S_POSN/
+;                                     __SAVE_S_POSN (sposn.asm) now read
+;                                     the firmware's own live cursor via
+;                                     TXT_GET_CURSOR/TXT_SET_CURSOR
+;                                     instead of caching it here. Kept
+;                                     zeroed by bootstrap.asm; nothing
+;                                     reads or writes it any more
 ;   $0E     1     ATTR_P             permanent attribute (INK/PAPER/etc.)
-;   $0F     1     ATTR_T             temporary attribute
-;   $10     1     P_FLAG             permanent print flags (OVER/INVERSE)
-;   $11     1     TV_FLAG            flags controlling output to screen
-;   $12     8     MEM0               scratch buffer, character bitmap gen.
-;   $1A     2     SCREEN_ADDR        pointer to the screen bitmap base
-;   $1C     2     SCREEN_ATTR_ADDR   placeholder -- the CPC has no
+;   $0F     1     MASK_P             permanent transparency mask -- kept
+;                                     immediately after ATTR_P because
+;                                     ink.asm/paper.asm/bright.asm/
+;                                     flash.asm (byte-for-byte zx48k)
+;                                     reach it with a plain `inc de`/
+;                                     `inc hl` from ATTR_P
+;   $10     1     ATTR_T             temporary attribute (same encoding
+;                                     as ATTR_P; see the bit layout below)
+;   $11     1     MASK_T             temporary transparency mask, same
+;                                     adjacency rule as MASK_P
+;   $12     1     P_FLAG             permanent print flags (OVER/INVERSE)
+;   $13     1     TV_FLAG            flags controlling output to screen
+;   $14     8     MEM0               scratch buffer; print.asm reuses it
+;                                     to stash a control code's first
+;                                     parameter byte across two
+;                                     __PRINTCHAR calls (AT's row, TAB's
+;                                     first byte) now that it doesn't need
+;                                     it for character bitmap generation
+;   $1C     2     SCREEN_ADDR        pointer to the screen bitmap base
+;   $1E     2     SCREEN_ATTR_ADDR   placeholder -- the CPC has no
 ;                                    per-cell attribute byte in memory
 ;                                    the way the Spectrum does
-;   $1E     1     ERR_NR             error code (-1 = no error)
-;   $1F     2     FRAMES             software frame counter
-;   $21     2     RANDOM_SEED_LOW    RNG seed, low 16 bits
-;   $23     8     ARRAY_SCRATCH      LBOUND_PTR/UBOUND_PTR/RET_ADDR/
+;   $20     1     ERR_NR             error code (-1 = no error)
+;   $21     2     FRAMES             software frame counter
+;   $23     2     RANDOM_SEED_LOW    RNG seed, low 16 bits
+;   $25     8     ARRAY_SCRATCH      LBOUND_PTR/UBOUND_PTR/RET_ADDR/
 ;                                    TMP_ARR_PTR (2 bytes each)
-;   $2B     2     CHR_SCRATCH        return-address scratch for CHR$()
-;   $2D     4     DIVF_SCRATCH       TMP (2B) + ERR_SP (2B) for float
+;   $2D     2     CHR_SCRATCH        return-address scratch for CHR$()
+;   $2F     4     DIVF_SCRATCH       TMP (2B) + ERR_SP (2B) for float
 ;                                    division
-;   $31     2     FW_BC              TODO(cpc): firmware BC' shadow, for
-;                                    a firmware call gate
-;   $33     1     IN_FW              TODO(cpc): "inside firmware gate"
-;                                    flag
-;   $34     6     MODF16_SCRATCH     return addr + divider DE/HL for
+;   $33     2     FW_BC              firmware's BC' shadow (fwcall.asm's
+;                                    gate); seeded from the live BC' by
+;                                    CPC_INIT_00_BOOTSTRAP before
+;                                    anything else can disturb it
+;   $35     1     IN_FW              "inside the firmware gate" flag,
+;                                    set/cleared by fwcall.asm around
+;                                    every call; for a future IM1
+;                                    front-end (Sec6.1 stage 2) to tell
+;                                    a firmware call from user code
+;   $36     6     MODF16_SCRATCH     return addr + divider DE/HL for
 ;                                    MOD16.16, kept separate from
 ;                                    ARRAY_SCRATCH (the two must not alias)
+;   $3C     1     PRINT_STATE        print.asm's control-code state
+;                                    machine: 0 = idle, nonzero = "the
+;                                    next __PRINTCHAR byte is a parameter
+;                                    for control code N" (see print.asm)
+;   $3D     2     PPC                current line number, for BREAK
+;                                    (break.asm); matches zx48k's PPC
+;                                    23621 by name/role only -- our
+;                                    error.asm doesn't print it (no ROM
+;                                    error formatter here), it's kept
+;                                    only so CHECK_BREAK's calling
+;                                    convention matches zx48k's exactly
+;                                    (see break.asm)
+;   $3F     2     FP_STKBOT          fp_calc.asm: base of the FP number
+;                                    stack (ROM STKBOT $5C63)
+;   $41     2     FP_STKEND          fp_calc.asm: next free slot in the
+;                                    FP number stack (ROM STKEND $5C65).
+;                                    MUST stay immediately followed by
+;                                    FP_BREG -- see the note in
+;                                    fp_calc.asm (ENT-TABLE loads both
+;                                    with one `ld bc,(FP_STKEND+1)`)
+;   $43     1     FP_BREG            fp_calc.asm: literal currently being
+;                                    executed (ROM BREG $5C67)
+;   $44     2     FP_MEM             fp_calc.asm: pointer to the MEM
+;                                    area, 6 cells of 5 bytes (ROM MEM
+;                                    $5C68)
+;   $46     60    FP_CALC_STACK      fp_calc.asm: the FP number stack
+;                                    itself (12 numbers max)
+;   $82     30    FP_MEM_AREA        fp_calc.asm: the MEM area (6 cells)
 ;   ------  ----
-;   $3A     (58 bytes used)
+;   $A0     (160 bytes used)
 ;
-; $3A bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
+; --- ATTR_P / ATTR_T bit layout (one byte, same shape as zx48k's) ------
+;
+;   bit   Meaning
+;   ---   ------------------------------------------------------------
+;   0-2   ink pen, stored mod 8 by ink.asm (unchanged from zx48k); only
+;         applied to the firmware mod 4 (mode 1 has 4 pens) -- see
+;         copy_attr.asm's __SET_ATTR_MODE
+;   3-5   paper pen, stored mod 8 by paper.asm, applied mod 4 likewise
+;   6     BRIGHT flag (bright.asm) -- accepted, ignored for now
+;         TODO(cpc): Phase 4a
+;   7     FLASH flag (flash.asm) -- accepted, ignored for now
+;         TODO(cpc): Phase 4a
+;
+; $A0 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
 ; below lets it be compared against .core.CPC_PRIV_SIZE by eye whenever
 ; this table grows.
 
@@ -62,42 +134,62 @@ SYSVAR_BASE         EQU .core.CPC_PRIV_BASE
 CHARS               EQU SYSVAR_BASE + $00   ; DW -- pointer to charset (8x8 cells)
 UDG                 EQU SYSVAR_BASE + $02   ; DW -- pointer to UDG charset
 COORDS              EQU SYSVAR_BASE + $04   ; DW -- last PLOT/graphics coordinates (X,Y)
-FLAGS2              EQU SYSVAR_BASE + $06   ; DB -- screen flags (OVER/INVERSE/etc.)
+FLAGS2              EQU SYSVAR_BASE + $06   ; DB -- screen flags (OVER/BOLD/ITALIC)
 ECHO_E              EQU SYSVAR_BASE + $07   ; DB -- (reserved, unused for now)
-DFCC                EQU SYSVAR_BASE + $08   ; DW -- next screen bitmap address for PRINT
-DFCCL               EQU SYSVAR_BASE + $0A   ; DW -- next screen attribute address for PRINT
-S_POSN              EQU SYSVAR_BASE + $0C   ; DW -- cursor position (H=row, L=column)
+DFCC                EQU SYSVAR_BASE + $08   ; DW -- unused (no VRAM pointer to track)
+DFCCL               EQU SYSVAR_BASE + $0A   ; DW -- unused (ditto)
+S_POSN              EQU SYSVAR_BASE + $0C   ; DW -- vestigial, see table above
 ATTR_P              EQU SYSVAR_BASE + $0E   ; DB -- permanent attribute (INK/PAPER/etc.)
-ATTR_T              EQU SYSVAR_BASE + $0F   ; DB -- temporary attribute
-P_FLAG              EQU SYSVAR_BASE + $10   ; DB -- permanent print flags (OVER/INVERSE)
-TV_FLAG             EQU SYSVAR_BASE + $11   ; DB -- flags controlling output to screen
-MEM0                EQU SYSVAR_BASE + $12   ; 8B -- scratch buffer for character bitmap generation
+MASK_P              EQU SYSVAR_BASE + $0F   ; DB -- permanent transparency mask
+ATTR_T              EQU SYSVAR_BASE + $10   ; DB -- temporary attribute
+MASK_T              EQU SYSVAR_BASE + $11   ; DB -- temporary transparency mask
+P_FLAG              EQU SYSVAR_BASE + $12   ; DB -- permanent print flags (OVER/INVERSE)
+TV_FLAG             EQU SYSVAR_BASE + $13   ; DB -- flags controlling output to screen
+MEM0                EQU SYSVAR_BASE + $14   ; 8B -- scratch buffer, see table above
 
-SCREEN_ADDR         EQU SYSVAR_BASE + $1A   ; DW -- pointer to the screen bitmap base
-SCREEN_ATTR_ADDR    EQU SYSVAR_BASE + $1C   ; DW -- placeholder, see table above
+SCREEN_ADDR         EQU SYSVAR_BASE + $1C   ; DW -- pointer to the screen bitmap base
+SCREEN_ATTR_ADDR    EQU SYSVAR_BASE + $1E   ; DW -- placeholder, see table above
 
-ERR_NR              EQU SYSVAR_BASE + $1E   ; DB -- error code (-1 = no error)
-FRAMES              EQU SYSVAR_BASE + $1F   ; DW -- software frame counter
-RANDOM_SEED_LOW     EQU SYSVAR_BASE + $21   ; DW -- RNG seed, low 16 bits
+ERR_NR              EQU SYSVAR_BASE + $20   ; DB -- error code (-1 = no error)
+FRAMES              EQU SYSVAR_BASE + $21   ; DW -- software frame counter
+RANDOM_SEED_LOW     EQU SYSVAR_BASE + $23   ; DW -- RNG seed, low 16 bits
 
-ARRAY_SCRATCH       EQU SYSVAR_BASE + $23   ; 8B -- LBOUND_PTR/UBOUND_PTR/RET_ADDR/TMP_ARR_PTR
-CHR_SCRATCH         EQU SYSVAR_BASE + $2B   ; 2B -- return-address scratch for CHR$()
-DIVF_SCRATCH        EQU SYSVAR_BASE + $2D   ; 4B -- TMP (2B) + ERR_SP (2B) for float division
+ARRAY_SCRATCH       EQU SYSVAR_BASE + $25   ; 8B -- LBOUND_PTR/UBOUND_PTR/RET_ADDR/TMP_ARR_PTR
+CHR_SCRATCH         EQU SYSVAR_BASE + $2D   ; 2B -- return-address scratch for CHR$()
+DIVF_SCRATCH        EQU SYSVAR_BASE + $2F   ; 4B -- TMP (2B) + ERR_SP (2B) for float division
 
-FW_BC               EQU SYSVAR_BASE + $31   ; 2B -- TODO(cpc): firmware BC' shadow
-IN_FW               EQU SYSVAR_BASE + $33   ; 1B -- TODO(cpc): "inside firmware gate" flag
+FW_BC               EQU SYSVAR_BASE + $33   ; 2B -- firmware's BC' shadow (fwcall.asm)
+IN_FW               EQU SYSVAR_BASE + $35   ; 1B -- "inside firmware gate" flag (fwcall.asm)
 
-MODF16_SCRATCH      EQU SYSVAR_BASE + $34   ; 6B -- return addr + divider DE/HL for MOD16.16
+MODF16_SCRATCH      EQU SYSVAR_BASE + $36   ; 6B -- return addr + divider DE/HL for MOD16.16
 
-CPC_SYSVARS_USED    EQU $3A                 ; bytes used above; compare by eye against
+PRINT_STATE         EQU SYSVAR_BASE + $3C   ; 1B -- print.asm's control-code state machine
+PPC                 EQU SYSVAR_BASE + $3D   ; DW -- current line number (break.asm CHECK_BREAK)
+
+; --- fp_calc.asm's own sysvars (equivalent to the ROM's STKBOT/STKEND/
+; BREG/MEM $5C63-$5C69) -- kept contiguous and in this exact order, see
+; the table above and fp_calc.asm's own header.
+FP_STKBOT           EQU SYSVAR_BASE + $3F   ; DW -- base of the FP number stack
+FP_STKEND           EQU SYSVAR_BASE + $41   ; DW -- next free slot in the FP number stack
+FP_BREG             EQU SYSVAR_BASE + $43   ; DB -- literal currently being executed
+FP_MEM              EQU SYSVAR_BASE + $44   ; DW -- pointer to the MEM area (6 cells x 5B)
+FP_CALC_STACK       EQU SYSVAR_BASE + $46   ; 60B -- the FP number stack (12 numbers max)
+FP_CALC_STACK_END   EQU FP_CALC_STACK + 60
+FP_MEM_AREA         EQU SYSVAR_BASE + $82   ; 30B -- the MEM area (6 cells x 5B)
+
+CPC_SYSVARS_USED    EQU $A0                 ; bytes used above; compare by eye against
                                              ; .core.CPC_PRIV_SIZE when this table grows
 
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
 ; SCR_COLS keeps zx48k's own "columns + 1" convention (see zx48k's
-; sysvars.asm: SCR_COLS EQU 33 for 32 visible columns).
+; sysvars.asm: SCR_COLS EQU 33 for 32 visible columns). SCR_COLS_VISIBLE
+; is the plain visible-column count, used by print.asm/sposn.asm's
+; explicit 0-39 range checks and arithmetic, where the "+1" convention
+; would just have to be undone again.
 
 SCR_COLS            EQU 41      ; columns + 1 (40 columns visible)
-SCR_ROWS            EQU 25      ; rows visible
+SCR_COLS_VISIBLE    EQU 40      ; columns visible (0-39, 0-based)
+SCR_ROWS            EQU 25      ; rows visible (0-24, 0-based)
 SCR_SIZE            EQU (SCR_ROWS << 8) + SCR_COLS
 
     pop namespace

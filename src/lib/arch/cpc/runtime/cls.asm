@@ -1,15 +1,41 @@
-; Phase-1 stub for zx48k/runtime/cls.asm (was: clearing the Spectrum
-; bitmap and attribute area directly, then resetting
-; COORDS/S_POSN/DFCC/DFCCL). The CPC's mode 1 screen is a different size
-; and layout, and has no separate attribute plane to clear (see
-; attr.asm).
-; TODO(cpc): Phase 4a -> firmware's SCR_CLEAR (&BC14).
+;; Clears the text screen and homes the cursor, via the firmware.
+;;
+;; zx48k's CLS clears the Spectrum bitmap and attribute areas directly
+;; and resets its own cursor/VRAM-pointer sysvars; there is no VRAM to
+;; touch here, and no local cursor cache to reset (see sposn.asm). The
+;; one thing that needs doing by hand is the *colour* to clear to:
+;; TXT_CLEAR_WINDOW clears using the firmware's *current* PAPER, and
+;; Sinclair BASIC's CLS always clears to the permanent attribute's
+;; paper (not any temporary one left over from the last PRINT), so the
+;; permanent paper is pushed to the firmware first.
 
-#include once <stub.asm>
+#include once <fwcall.asm>
+#include once <sysvars.asm>
 
     push namespace core
 
 CLS:
-    jp __CPC_NOT_IMPLEMENTED
+    ; Firmware entries called (via the gate): TXT_SET_PAPER (&BB96, A =
+    ; paper pen) then TXT_CLEAR_WINDOW (&BB6C), which clears the
+    ; current window with that paper and homes the cursor to its
+    ; top-left corner (0,0 for the default full-screen window).
+    ; Registers clobbered: AF, HL (main); BC', DE', HL', AF' (the gate).
+    PROC
+
+    ld a, (ATTR_P)
+    and 038h              ; paper: bits 3-5 of ATTR_P
+    rrca
+    rrca
+    rrca                   ; -> bits 0-2, mod 8
+    and 3                  ; mod 4 for the firmware (mode 1, 4 pens)
+    call .core.__FW_CALL
+    defw $BB96              ; TXT_SET_PAPER
+
+    call .core.__FW_CALL
+    defw $BB6C               ; TXT_CLEAR_WINDOW
+
+    ret
+
+    ENDP
 
     pop namespace

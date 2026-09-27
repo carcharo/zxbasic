@@ -1,13 +1,17 @@
 ; Sets ink color in ATTR_P permanently
-; Parameter: Paper color in A register
+; Parameter: Ink color in A register
 ;
-; Amstrad CPC: byte-for-byte zx48k's version. It only touches ATTR_P/
-; ATTR_T by name via sysvars.asm (no ROM call, no fixed sysvar address),
-; and cpc's own sysvars.asm relocates those names into the private
-; runtime block, so this is already correct here -- it just has no
-; visible effect yet since PRINT/CLS are still stubs (see print.asm,
-; cls.asm).
+; Amstrad CPC: byte-for-byte zx48k's version for the permanent entry
+; (INK) -- it only touches ATTR_P/MASK_P by name via sysvars.asm, which
+; cpc's own sysvars.asm relocates into the private runtime block, so a
+; plain INK statement just updates memory (it takes effect at the next
+; PRINT's COPY_ATTR, exactly like zx48k). INK_TMP additionally pushes
+; the new pen to the firmware immediately (via __SET_ATTR_MODE,
+; copy_attr.asm) -- unlike the Spectrum, where SET_ATTR re-reads ATTR_T
+; per character, the CPC firmware's pen is persistent state, so a
+; mid-PRINT `PRINT INK n;...` has to update it right away.
 
+#include once <copy_attr.asm>
 #include once <sysvars.asm>
 
     push namespace core
@@ -43,10 +47,12 @@ __SET_INK2:
     ld (de), a ; Store new attr
     ret
 
-; Sets the INK color passed in A register in the ATTR_T variable
+; Sets the INK color passed in A register in the ATTR_T variable, and
+; pushes it to the firmware right away (see the file header).
 INK_TMP:
     ld de, ATTR_T
-    jp __SET_INK
+    call __SET_INK
+    jp __SET_ATTR_MODE
 
     ENDP
 

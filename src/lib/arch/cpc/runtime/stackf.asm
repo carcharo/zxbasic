@@ -1,27 +1,95 @@
-; Phase-1 stub for zx48k/runtime/stackf.asm (was: Spectrum ROM FP
-; calculator stack, via fixed entry points __FPSTACK_PUSH &2AB6 /
-; __FPSTACK_POP &2BF1). Those addresses don't exist on the CPC. Every
-; `rst 30h` FP runtime file and draw3.asm/io/sound/beep.asm call into
-; these, so they must all be defined even though real float support
-; doesn't exist yet (fp_calc.asm's own RST 6 target already traps first
-; anyway -- see its header).
-; TODO(cpc): replace together with fp_calc.asm by porting zx81sd's own
-; relocatable stackf.asm, which needs no fixed ROM addresses.
+; stackf.asm -- FP calculator stack push/pop
+;
+; Ported from src/lib/arch/zx81sd/runtime/stackf.asm. Replaces zx48k's
+; stackf.asm, which defines __FPSTACK_PUSH/__FPSTACK_POP as FIXED Spectrum
+; ROM addresses ($2AB6h STK-STORE, $2BF1h STK-FETCH). On the CPC those
+; addresses don't exist, so these are ordinary relocatable routines built
+; on fp_calc.asm's own FP number stack (same 5-byte format).
 
-#include once <stub.asm>
+#include once <fp_calc.asm>
 
     push namespace core
 
+; ---------------------------------------------------------------------------
+; __FPSTACK_PUSH -- pushes A,E,D,C,B (5 bytes) onto the FP stack
+; Replaces STK-STORE ($2AB6h, Spectrum ROM)
+; ---------------------------------------------------------------------------
 __FPSTACK_PUSH:
-    jp __CPC_NOT_IMPLEMENTED
+    push bc
+    push af
+    ld   bc, 5
+    call CALC_TEST_ROOM
+    pop  af
+    pop  bc
+    ld   hl, (FP_STKEND)
+    ld   (hl), a
+    inc  hl
+    ld   (hl), e
+    inc  hl
+    ld   (hl), d
+    inc  hl
+    ld   (hl), c
+    inc  hl
+    ld   (hl), b
+    inc  hl
+    ld   (FP_STKEND), hl
+    ret
 
+__FPSTACK_PUSH2: ; Pushes Current A ED CB registers and top of the stack on (SP + 4)
+    ; Second argument to push into the stack calculator is popped out of the stack
+    ; Since the caller routine also receives the parameters into the top of the stack
+    ; four bytes must be removed from SP before pop them out
+
+    call __FPSTACK_PUSH ; Pushes A ED CB into the FP-STACK
+    exx
+    pop hl       ; Caller-Caller return addr
+    exx
+    pop hl       ; Caller return addr
+
+    pop af
+    pop de
+    pop bc
+
+    push hl      ; Caller return addr
+    exx
+    push hl      ; Caller-Caller return addr
+    exx
+
+    jp __FPSTACK_PUSH
+
+
+__FPSTACK_I16:	; Pushes 16 bits integer in HL into the FP ROM STACK
+    ; This format is specified in the ZX 48K Manual
+    ; You can push a 16 bit signed integer as
+    ; 0 SS LL HH 0, being SS the sign and LL HH the low
+    ; and High byte respectively
+    ld a, h
+    rla			; sign to Carry
+    sbc	a, a	; 0 if positive, FF if negative
+    ld e, a
+    ld d, l
+    ld c, h
+    xor a
+    ld b, a
+    jp __FPSTACK_PUSH
+
+; ---------------------------------------------------------------------------
+; __FPSTACK_POP -- pops the last 5 bytes off the FP stack into A,E,D,C,B
+; Replaces STK-FETCH ($2BF1h, Spectrum ROM)
+; ---------------------------------------------------------------------------
 __FPSTACK_POP:
-    jp __CPC_NOT_IMPLEMENTED
-
-__FPSTACK_PUSH2:
-    jp __CPC_NOT_IMPLEMENTED
-
-__FPSTACK_I16:
-    jp __CPC_NOT_IMPLEMENTED
+    ld   hl, (FP_STKEND)
+    dec  hl
+    ld   b, (hl)
+    dec  hl
+    ld   c, (hl)
+    dec  hl
+    ld   d, (hl)
+    dec  hl
+    ld   e, (hl)
+    dec  hl
+    ld   a, (hl)
+    ld   (FP_STKEND), hl
+    ret
 
     pop namespace

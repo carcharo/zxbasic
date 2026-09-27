@@ -19,29 +19,410 @@
 .core.ZXBASIC_USER_DATA_LEN EQU .core.ZXBASIC_USER_DATA_END - .core.ZXBASIC_USER_DATA
 	.core.__LABEL__.ZXBASIC_USER_DATA_LEN EQU .core.ZXBASIC_USER_DATA_LEN
 	.core.__LABEL__.ZXBASIC_USER_DATA EQU .core.ZXBASIC_USER_DATA
+_i:
+	DEFB 00
 .core.ZXBASIC_USER_DATA_END:
 .core.__MAIN_PROGRAM__:
+	call .core.CLS
 	call .core.COPY_ATTR
+	xor a
+	push af
+	xor a
+	call .core.PRINT_AT
 	ld hl, .LABEL.__LABEL0
 	xor a
 	call .core.__PRINTSTR
+	call .core.COPY_ATTR
+	ld a, 24
+	push af
+	ld a, 39
+	call .core.PRINT_AT
+	ld hl, .LABEL.__LABEL1
+	xor a
+	call .core.__PRINTSTR
+	call .core.COPY_ATTR
+	ld a, 12
+	push af
+	ld a, 20
+	call .core.PRINT_AT
+	ld hl, .LABEL.__LABEL2
+	xor a
+	call .core.__PRINTSTR
 	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld a, 2
+	call .core.INK_TMP
+	ld hl, .LABEL.__LABEL3
+	xor a
+	call .core.__PRINTSTR
+	ld a, 1
+	call .core.PAPER_TMP
+	ld hl, .LABEL.__LABEL4
+	xor a
+	call .core.__PRINTSTR
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld hl, .LABEL.__LABEL5
+	xor a
+	call .core.__PRINTSTR
+	call .core.PRINT_EOL
+	ld a, 3
+	call .core.INK
+	call .core.COPY_ATTR
+	ld hl, .LABEL.__LABEL6
+	xor a
+	call .core.__PRINTSTR
+	call .core.PRINT_EOL
+	ld a, 1
+	call .core.INVERSE
+	call .core.COPY_ATTR
+	ld hl, .LABEL.__LABEL7
+	xor a
+	call .core.__PRINTSTR
+	call .core.PRINT_EOL
+	xor a
+	call .core.INVERSE
+	call .core.COPY_ATTR
+	ld hl, .LABEL.__LABEL8
+	xor a
+	call .core.__PRINTSTR
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld a, 12
+	call .core.__PRINTU8
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld a, 244
+	call .core.__PRINTI8
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld hl, 1234
+	call .core.__PRINTU16
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld hl, 64302
+	call .core.__PRINTI16
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld de, 1
+	ld hl, 57920
+	call .core.__PRINTU32
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld de, 65534
+	ld hl, 7616
+	call .core.__PRINTI32
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld de, 3
+	ld hl, 9175
+	call .core.__PRINTF16
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld a, 1
+	call .core.__PRINTU8
+	call .core.PRINT_COMMA
+	ld a, 2
+	call .core.__PRINTU8
+	call .core.PRINT_COMMA
+	ld a, 3
+	call .core.__PRINTU8
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld a, 1
+	call .core.__PRINTU8
+	ld a, 10
+	call .core.PRINT_TAB
+	ld a, 2
+	call .core.__PRINTU8
+	ld a, 25
+	call .core.PRINT_TAB
+	ld a, 3
+	call .core.__PRINTU8
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld hl, .LABEL.__LABEL9
+	xor a
+	call .core.__PRINTSTR
+	ld hl, .LABEL.__LABEL10
+	xor a
+	call .core.__PRINTSTR
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld hl, .LABEL.__LABEL11
+	xor a
+	call .core.__PRINTSTR
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld hl, .LABEL.__LABEL12
+	xor a
+	call .core.__PRINTSTR
+	ld hl, .LABEL.__LABEL13
+	xor a
+	call .core.__PRINTSTR
+	call .core.PRINT_EOL
+	call .core.COPY_ATTR
+	ld hl, .LABEL.__LABEL14
+	xor a
+	call .core.__PRINTSTR
+	call .core.PRINT_EOL
+	ld a, 1
+	ld (_i), a
+	jp .LABEL.__LABEL15
+.LABEL.__LABEL18:
+	call .core.COPY_ATTR
+	ld hl, .LABEL.__LABEL20
+	xor a
+	call .core.__PRINTSTR
+	ld a, (_i)
+	call .core.__PRINTU8
+	call .core.PRINT_EOL
+.LABEL.__LABEL19:
+	ld hl, _i
+	inc (hl)
+.LABEL.__LABEL15:
+	ld a, 20
+	ld hl, (_i - 1)
+	cp h
+	jp nc, .LABEL.__LABEL18
+.LABEL.__LABEL17:
 	ld hl, 0
 	ld b, h
 	ld c, l
 .core.__END_PROGRAM:
 	jp .core.__CPC_END
 .LABEL.__LABEL0:
-	DEFW 0009h
-	DEFB 48h
-	DEFB 45h
+	DEFW 0007h
+	DEFB 54h
+	DEFB 6Fh
+	DEFB 70h
 	DEFB 4Ch
-	DEFB 4Ch
-	DEFB 4Fh
+	DEFB 65h
+	DEFB 66h
+	DEFB 74h
+.LABEL.__LABEL1:
+	DEFW 0001h
+	DEFB 5Ah
+.LABEL.__LABEL2:
+	DEFW 0003h
+	DEFB 4Dh
+	DEFB 69h
+	DEFB 64h
+.LABEL.__LABEL3:
+	DEFW 0004h
+	DEFB 72h
+	DEFB 65h
+	DEFB 64h
+	DEFB 3Fh
+.LABEL.__LABEL4:
+	DEFW 0007h
+	DEFB 70h
+	DEFB 69h
+	DEFB 6Eh
+	DEFB 6Bh
+	DEFB 69h
+	DEFB 73h
+	DEFB 68h
+.LABEL.__LABEL5:
+	DEFW 000Ch
+	DEFB 6Eh
+	DEFB 6Fh
+	DEFB 72h
+	DEFB 6Dh
+	DEFB 61h
+	DEFB 6Ch
 	DEFB 20h
-	DEFB 43h
-	DEFB 50h
-	DEFB 43h
+	DEFB 61h
+	DEFB 67h
+	DEFB 61h
+	DEFB 69h
+	DEFB 6Eh
+.LABEL.__LABEL6:
+	DEFW 000Eh
+	DEFB 70h
+	DEFB 65h
+	DEFB 72h
+	DEFB 6Dh
+	DEFB 61h
+	DEFB 6Eh
+	DEFB 65h
+	DEFB 6Eh
+	DEFB 74h
+	DEFB 20h
+	DEFB 69h
+	DEFB 6Eh
+	DEFB 6Bh
+	DEFB 33h
+.LABEL.__LABEL7:
+	DEFW 0007h
+	DEFB 69h
+	DEFB 6Eh
+	DEFB 76h
+	DEFB 65h
+	DEFB 72h
+	DEFB 73h
+	DEFB 65h
+.LABEL.__LABEL8:
+	DEFW 0004h
+	DEFB 62h
+	DEFB 61h
+	DEFB 63h
+	DEFB 6Bh
+.LABEL.__LABEL9:
+	DEFW 0001h
+	DEFB 61h
+.LABEL.__LABEL10:
+	DEFW 0001h
+	DEFB 62h
+.LABEL.__LABEL11:
+	DEFW 0001h
+	DEFB 63h
+.LABEL.__LABEL12:
+	DEFW 0007h
+	DEFB 63h
+	DEFB 6Fh
+	DEFB 64h
+	DEFB 65h
+	DEFB 73h
+	DEFB 3Ah
+	DEFB 20h
+.LABEL.__LABEL13:
+	DEFW 0008h
+	DEFB 16h
+	DEFB 05h
+	DEFB 05h
+	DEFB 10h
+	DEFB 03h
+	DEFB 11h
+	DEFB 01h
+	DEFB 58h
+.LABEL.__LABEL14:
+	DEFW 0076h
+	DEFB 54h
+	DEFB 68h
+	DEFB 69h
+	DEFB 73h
+	DEFB 20h
+	DEFB 69h
+	DEFB 73h
+	DEFB 20h
+	DEFB 61h
+	DEFB 20h
+	DEFB 76h
+	DEFB 65h
+	DEFB 72h
+	DEFB 79h
+	DEFB 20h
+	DEFB 6Ch
+	DEFB 6Fh
+	DEFB 6Eh
+	DEFB 67h
+	DEFB 20h
+	DEFB 6Ch
+	DEFB 69h
+	DEFB 6Eh
+	DEFB 65h
+	DEFB 20h
+	DEFB 74h
+	DEFB 68h
+	DEFB 61h
+	DEFB 74h
+	DEFB 20h
+	DEFB 73h
+	DEFB 68h
+	DEFB 6Fh
+	DEFB 75h
+	DEFB 6Ch
+	DEFB 64h
+	DEFB 20h
+	DEFB 77h
+	DEFB 72h
+	DEFB 61h
+	DEFB 70h
+	DEFB 20h
+	DEFB 61h
+	DEFB 63h
+	DEFB 72h
+	DEFB 6Fh
+	DEFB 73h
+	DEFB 73h
+	DEFB 20h
+	DEFB 74h
+	DEFB 68h
+	DEFB 65h
+	DEFB 20h
+	DEFB 66h
+	DEFB 6Fh
+	DEFB 72h
+	DEFB 74h
+	DEFB 79h
+	DEFB 20h
+	DEFB 63h
+	DEFB 6Fh
+	DEFB 6Ch
+	DEFB 75h
+	DEFB 6Dh
+	DEFB 6Eh
+	DEFB 20h
+	DEFB 77h
+	DEFB 69h
+	DEFB 64h
+	DEFB 74h
+	DEFB 68h
+	DEFB 20h
+	DEFB 6Fh
+	DEFB 66h
+	DEFB 20h
+	DEFB 74h
+	DEFB 68h
+	DEFB 65h
+	DEFB 20h
+	DEFB 73h
+	DEFB 63h
+	DEFB 72h
+	DEFB 65h
+	DEFB 65h
+	DEFB 6Eh
+	DEFB 20h
+	DEFB 61h
+	DEFB 6Eh
+	DEFB 64h
+	DEFB 20h
+	DEFB 6Bh
+	DEFB 65h
+	DEFB 65h
+	DEFB 70h
+	DEFB 20h
+	DEFB 67h
+	DEFB 6Fh
+	DEFB 69h
+	DEFB 6Eh
+	DEFB 67h
+	DEFB 20h
+	DEFB 77h
+	DEFB 65h
+	DEFB 6Ch
+	DEFB 6Ch
+	DEFB 20h
+	DEFB 70h
+	DEFB 61h
+	DEFB 73h
+	DEFB 74h
+	DEFB 20h
+	DEFB 6Fh
+	DEFB 6Eh
+	DEFB 65h
+	DEFB 20h
+	DEFB 72h
+	DEFB 6Fh
+	DEFB 77h
+.LABEL.__LABEL20:
+	DEFW 0005h
+	DEFB 6Ch
+	DEFB 69h
+	DEFB 6Eh
+	DEFB 65h
+	DEFB 20h
 	;; --- end of user code ---
 #line 1 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	; -----------------------------------------------------------------------
@@ -424,7 +805,40 @@ __CPC_END:
 	    rst  0
 #line 157 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    pop namespace
-#line 24 "tests/functional/arch/cpc/print_hello.bas"
+#line 403 "tests/functional/arch/cpc/showcase.bas"
+#line 1 "src/lib/arch/cpc/runtime/cls.asm"
+	;; Clears the text screen and homes the cursor, via the firmware.
+	;;
+	;; zx48k's CLS clears the Spectrum bitmap and attribute areas directly
+	;; and resets its own cursor/VRAM-pointer sysvars; there is no VRAM to
+	;; touch here, and no local cursor cache to reset (see sposn.asm). The
+;; one thing that needs doing by hand is the *colour* to clear to:
+	;; TXT_CLEAR_WINDOW clears using the firmware's *current* PAPER, and
+	;; Sinclair BASIC's CLS always clears to the permanent attribute's
+	;; paper (not any temporary one left over from the last PRINT), so the
+	;; permanent paper is pushed to the firmware first.
+	    push namespace core
+CLS:
+    ; Firmware entries called (via the gate): TXT_SET_PAPER (&BB96, A =
+	    ; paper pen) then TXT_CLEAR_WINDOW (&BB6C), which clears the
+	    ; current window with that paper and homes the cursor to its
+	    ; top-left corner (0,0 for the default full-screen window).
+    ; Registers clobbered: AF, HL (main); BC', DE', HL', AF' (the gate).
+	    PROC
+	    ld a, (ATTR_P)
+    and 038h              ; paper: bits 3-5 of ATTR_P
+	    rrca
+	    rrca
+	    rrca                   ; -> bits 0-2, mod 8
+	    and 3                  ; mod 4 for the firmware (mode 1, 4 pens)
+	    call .core.__FW_CALL
+	    defw $BB96              ; TXT_SET_PAPER
+	    call .core.__FW_CALL
+	    defw $BB6C               ; TXT_CLEAR_WINDOW
+	    ret
+	    ENDP
+	    pop namespace
+#line 404 "tests/functional/arch/cpc/showcase.bas"
 #line 1 "src/lib/arch/cpc/runtime/copy_attr.asm"
 	; Copies the permanent attribute (ATTR_P/MASK_P/FLAGS2/P_FLAG) into the
 	; temporary one (ATTR_T/MASK_T/...) at the start of every PRINT
@@ -508,7 +922,135 @@ __SAM_NOINV:
 	    ret
 	    ENDP
 	    pop namespace
-#line 25 "tests/functional/arch/cpc/print_hello.bas"
+#line 405 "tests/functional/arch/cpc/showcase.bas"
+#line 1 "src/lib/arch/cpc/runtime/ink.asm"
+	; Sets ink color in ATTR_P permanently
+; Parameter: Ink color in A register
+	;
+; Amstrad CPC: byte-for-byte zx48k's version for the permanent entry
+	; (INK) -- it only touches ATTR_P/MASK_P by name via sysvars.asm, which
+	; cpc's own sysvars.asm relocates into the private runtime block, so a
+	; plain INK statement just updates memory (it takes effect at the next
+	; PRINT's COPY_ATTR, exactly like zx48k). INK_TMP additionally pushes
+	; the new pen to the firmware immediately (via __SET_ATTR_MODE,
+	; copy_attr.asm) -- unlike the Spectrum, where SET_ATTR re-reads ATTR_T
+	; per character, the CPC firmware's pen is persistent state, so a
+	; mid-PRINT `PRINT INK n;...` has to update it right away.
+	    push namespace core
+INK:
+	    PROC
+	    LOCAL __SET_INK
+	    LOCAL __SET_INK2
+	    ld de, ATTR_P
+__SET_INK:
+	    cp 8
+	    jr nz, __SET_INK2
+	    inc de ; Points DE to MASK_T or MASK_P
+	    ld a, (de)
+	    or 7 ; Set bits 0,1,2 to enable transparency
+	    ld (de), a
+	    ret
+__SET_INK2:
+	    ; Another entry. This will set the ink color at location pointer by DE
+	    and 7	; # Gets color mod 8
+	    ld b, a	; Saves the color
+	    ld a, (de)
+	    and 0F8h ; Clears previous value
+	    or b
+	    ld (de), a
+	    inc de ; Points DE to MASK_T or MASK_P
+	    ld a, (de)
+	    and 0F8h ; Reset bits 0,1,2 sign to disable transparency
+	    ld (de), a ; Store new attr
+	    ret
+	; Sets the INK color passed in A register in the ATTR_T variable, and
+	; pushes it to the firmware right away (see the file header).
+INK_TMP:
+	    ld de, ATTR_T
+	    call __SET_INK
+	    jp __SET_ATTR_MODE
+	    ENDP
+	    pop namespace
+#line 406 "tests/functional/arch/cpc/showcase.bas"
+#line 1 "src/lib/arch/cpc/runtime/inverse.asm"
+	; Sets INVERSE flag in P_FLAG permanently
+; Parameter: INVERSE flag in bit 0 of A register
+	;
+; Amstrad CPC: INVERSE only touches P_FLAG by name (no ROM/HW), kept
+	; byte-for-byte identical to zx48k's. INVERSE_TMP tail-calls into
+	; copy_attr.asm's __SET_ATTR_MODE, which traps (see copy_attr.asm), so is
+	; dead code for now.
+	    push namespace core
+INVERSE:
+	    PROC
+	    and 1	; # Convert to 0/1
+	    add a, a; # Shift left 3 bits for permanent
+	    add a, a
+	    add a, a
+	    ld hl, P_FLAG
+	    res 3, (hl)
+	    or (hl)
+	    ld (hl), a
+	    ret
+	; Sets INVERSE flag in P_FLAG temporarily
+INVERSE_TMP:
+	    and 1
+	    add a, a
+	    add a, a; # Shift left 2 bits for temporary
+	    ld hl, P_FLAG
+	    res 2, (hl)
+	    or (hl)
+	    ld (hl), a
+	    jp __SET_ATTR_MODE
+	    ENDP
+	    pop namespace
+#line 407 "tests/functional/arch/cpc/showcase.bas"
+#line 1 "src/lib/arch/cpc/runtime/paper.asm"
+	; Sets paper color in ATTR_P permanently
+; Parameter: Paper color in A register
+	;
+; Amstrad CPC: byte-for-byte zx48k's version for the permanent entry
+	; (PAPER). PAPER_TMP additionally pushes the new pen to the firmware
+	; right away, via __SET_ATTR_MODE -- see ink.asm's header for why.
+	    push namespace core
+PAPER:
+	    PROC
+	    LOCAL __SET_PAPER
+	    LOCAL __SET_PAPER2
+	    ld de, ATTR_P
+__SET_PAPER:
+	    cp 8
+	    jr nz, __SET_PAPER2
+	    inc de
+	    ld a, (de)
+	    or 038h
+	    ld (de), a
+	    ret
+	    ; Another entry. This will set the paper color at location pointer by DE
+__SET_PAPER2:
+	    and 7	; # Remove
+	    rlca
+	    rlca
+	    rlca		; a *= 8
+	    ld b, a	; Saves the color
+	    ld a, (de)
+	    and 0C7h ; Clears previous value
+	    or b
+	    ld (de), a
+	    inc de ; Points to MASK_T or MASK_P accordingly
+	    ld a, (de)
+	    and 0C7h  ; Resets bits 3,4,5
+	    ld (de), a
+	    ret
+	; Sets the PAPER color passed in A register in the ATTR_T variable, and
+	; pushes it to the firmware right away (see the file header).
+PAPER_TMP:
+	    ld de, ATTR_T
+	    call __SET_PAPER
+	    jp __SET_ATTR_MODE
+	    ENDP
+	    pop namespace
+#line 408 "tests/functional/arch/cpc/showcase.bas"
 #line 1 "src/lib/arch/cpc/runtime/print.asm"
 	; PRINT command routine
 	; Does not print attribute. Use PRINT_STR or PRINT_NUM for that
@@ -855,101 +1397,6 @@ CALL_HL:
 	    jp (hl)
 	    pop namespace
 #line 82 "src/lib/arch/cpc/runtime/print.asm"
-#line 1 "src/lib/arch/cpc/runtime/ink.asm"
-	; Sets ink color in ATTR_P permanently
-; Parameter: Ink color in A register
-	;
-; Amstrad CPC: byte-for-byte zx48k's version for the permanent entry
-	; (INK) -- it only touches ATTR_P/MASK_P by name via sysvars.asm, which
-	; cpc's own sysvars.asm relocates into the private runtime block, so a
-	; plain INK statement just updates memory (it takes effect at the next
-	; PRINT's COPY_ATTR, exactly like zx48k). INK_TMP additionally pushes
-	; the new pen to the firmware immediately (via __SET_ATTR_MODE,
-	; copy_attr.asm) -- unlike the Spectrum, where SET_ATTR re-reads ATTR_T
-	; per character, the CPC firmware's pen is persistent state, so a
-	; mid-PRINT `PRINT INK n;...` has to update it right away.
-	    push namespace core
-INK:
-	    PROC
-	    LOCAL __SET_INK
-	    LOCAL __SET_INK2
-	    ld de, ATTR_P
-__SET_INK:
-	    cp 8
-	    jr nz, __SET_INK2
-	    inc de ; Points DE to MASK_T or MASK_P
-	    ld a, (de)
-	    or 7 ; Set bits 0,1,2 to enable transparency
-	    ld (de), a
-	    ret
-__SET_INK2:
-	    ; Another entry. This will set the ink color at location pointer by DE
-	    and 7	; # Gets color mod 8
-	    ld b, a	; Saves the color
-	    ld a, (de)
-	    and 0F8h ; Clears previous value
-	    or b
-	    ld (de), a
-	    inc de ; Points DE to MASK_T or MASK_P
-	    ld a, (de)
-	    and 0F8h ; Reset bits 0,1,2 sign to disable transparency
-	    ld (de), a ; Store new attr
-	    ret
-	; Sets the INK color passed in A register in the ATTR_T variable, and
-	; pushes it to the firmware right away (see the file header).
-INK_TMP:
-	    ld de, ATTR_T
-	    call __SET_INK
-	    jp __SET_ATTR_MODE
-	    ENDP
-	    pop namespace
-#line 83 "src/lib/arch/cpc/runtime/print.asm"
-#line 1 "src/lib/arch/cpc/runtime/paper.asm"
-	; Sets paper color in ATTR_P permanently
-; Parameter: Paper color in A register
-	;
-; Amstrad CPC: byte-for-byte zx48k's version for the permanent entry
-	; (PAPER). PAPER_TMP additionally pushes the new pen to the firmware
-	; right away, via __SET_ATTR_MODE -- see ink.asm's header for why.
-	    push namespace core
-PAPER:
-	    PROC
-	    LOCAL __SET_PAPER
-	    LOCAL __SET_PAPER2
-	    ld de, ATTR_P
-__SET_PAPER:
-	    cp 8
-	    jr nz, __SET_PAPER2
-	    inc de
-	    ld a, (de)
-	    or 038h
-	    ld (de), a
-	    ret
-	    ; Another entry. This will set the paper color at location pointer by DE
-__SET_PAPER2:
-	    and 7	; # Remove
-	    rlca
-	    rlca
-	    rlca		; a *= 8
-	    ld b, a	; Saves the color
-	    ld a, (de)
-	    and 0C7h ; Clears previous value
-	    or b
-	    ld (de), a
-	    inc de ; Points to MASK_T or MASK_P accordingly
-	    ld a, (de)
-	    and 0C7h  ; Resets bits 3,4,5
-	    ld (de), a
-	    ret
-	; Sets the PAPER color passed in A register in the ATTR_T variable, and
-	; pushes it to the firmware right away (see the file header).
-PAPER_TMP:
-	    ld de, ATTR_T
-	    call __SET_PAPER
-	    jp __SET_ATTR_MODE
-	    ENDP
-	    pop namespace
-#line 84 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/flash.asm"
 	; Sets flash flag in ATTR_P permanently
 ; Parameter: Paper color in A register
@@ -1076,39 +1523,6 @@ OVER_TMP:
 	    ENDP
 	    pop namespace
 #line 87 "src/lib/arch/cpc/runtime/print.asm"
-#line 1 "src/lib/arch/cpc/runtime/inverse.asm"
-	; Sets INVERSE flag in P_FLAG permanently
-; Parameter: INVERSE flag in bit 0 of A register
-	;
-; Amstrad CPC: INVERSE only touches P_FLAG by name (no ROM/HW), kept
-	; byte-for-byte identical to zx48k's. INVERSE_TMP tail-calls into
-	; copy_attr.asm's __SET_ATTR_MODE, which traps (see copy_attr.asm), so is
-	; dead code for now.
-	    push namespace core
-INVERSE:
-	    PROC
-	    and 1	; # Convert to 0/1
-	    add a, a; # Shift left 3 bits for permanent
-	    add a, a
-	    add a, a
-	    ld hl, P_FLAG
-	    res 3, (hl)
-	    or (hl)
-	    ld (hl), a
-	    ret
-	; Sets INVERSE flag in P_FLAG temporarily
-INVERSE_TMP:
-	    and 1
-	    add a, a
-	    add a, a; # Shift left 2 bits for temporary
-	    ld hl, P_FLAG
-	    res 2, (hl)
-	    or (hl)
-	    ld (hl), a
-	    jp __SET_ATTR_MODE
-	    ENDP
-	    pop namespace
-#line 88 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/bold.asm"
 	; Sets BOLD flag in P_FLAG permanently
 ; Parameter: BOLD flag in bit 0 of A register
@@ -1506,8 +1920,9 @@ __PA_ERR:
 	    jp __STOP
 	    ENDP
 	    pop namespace
-#line 26 "tests/functional/arch/cpc/print_hello.bas"
-#line 1 "src/lib/arch/zx48k/runtime/printstr.asm"
+#line 409 "tests/functional/arch/cpc/showcase.bas"
+#line 1 "src/lib/arch/zx48k/runtime/printf16.asm"
+#line 1 "src/lib/arch/zx48k/runtime/printnum.asm"
 #line 1 "src/lib/arch/cpc/runtime/attr.asm"
 ; Phase-1 stub for zx48k/runtime/attr.asm (was: computing a Spectrum
 	; attribute cell address from screen coordinates and mixing a byte into
@@ -1563,7 +1978,469 @@ __SET_ATTR:
 __SET_ATTR2:
 	    jp __CPC_NOT_IMPLEMENTED
 	    pop namespace
-#line 4 "src/lib/arch/zx48k/runtime/printstr.asm"
+#line 3 "src/lib/arch/zx48k/runtime/printnum.asm"
+	    push namespace core
+__PRINTU_START:
+	    PROC
+	    LOCAL __PRINTU_CONT
+	    ld a, b
+	    or a
+	    jp nz, __PRINTU_CONT
+	    ld a, '0'
+	    jp __PRINT_DIGIT
+__PRINTU_CONT:
+	    pop af
+	    push bc
+	    call __PRINT_DIGIT
+	    pop bc
+	    djnz __PRINTU_CONT
+	    ret
+	    ENDP
+__PRINT_MINUS: ; PRINT the MINUS (-) sign. CALLER must preserve registers
+	    ld a, '-'
+	    jp __PRINT_DIGIT
+	__PRINT_DIGIT EQU __PRINTCHAR ; PRINTS the char in A register, and puts its attrs
+	    pop namespace
+#line 2 "src/lib/arch/zx48k/runtime/printf16.asm"
+#line 1 "src/lib/arch/zx48k/runtime/printi16.asm"
+#line 1 "src/lib/arch/zx48k/runtime/arith/div16.asm"
+	; 16 bit division and modulo functions
+	; for both signed and unsigned values
+#line 1 "src/lib/arch/zx48k/runtime/neg16.asm"
+	; Negates HL value (16 bit)
+	    push namespace core
+__ABS16:
+	    bit 7, h
+	    ret z
+__NEGHL:
+	    ld a, l			; HL = -HL
+	    cpl
+	    ld l, a
+	    ld a, h
+	    cpl
+	    ld h, a
+	    inc hl
+	    ret
+	    pop namespace
+#line 5 "src/lib/arch/zx48k/runtime/arith/div16.asm"
+	    push namespace core
+__DIVU16:    ; 16 bit unsigned division
+	    ; HL = Dividend, Stack Top = Divisor
+	    ;   -- OBSOLETE ; Now uses FASTCALL convention
+	    ;   ex de, hl
+	    ;	pop hl      ; Return address
+	    ;	ex (sp), hl ; CALLEE Convention
+__DIVU16_FAST:
+	    ld a, h
+	    ld c, l
+	    ld hl, 0
+	    ld b, 16
+__DIV16LOOP:
+	    sll c
+	    rla
+	    adc hl,hl
+	    sbc hl,de
+	    jr  nc, __DIV16NOADD
+	    add hl,de
+	    dec c
+__DIV16NOADD:
+	    djnz __DIV16LOOP
+	    ex de, hl
+	    ld h, a
+	    ld l, c
+	    ret     ; HL = quotient, DE = Mudulus
+__MODU16:    ; 16 bit modulus
+	    ; HL = Dividend, Stack Top = Divisor
+	    ;ex de, hl
+	    ;pop hl
+	    ;ex (sp), hl ; CALLEE Convention
+	    call __DIVU16_FAST
+	    ex de, hl	; hl = reminder (modulus)
+	    ; de = quotient
+	    ret
+__DIVI16:	; 16 bit signed division
+	    ;	--- The following is OBSOLETE ---
+	    ;	ex de, hl
+	    ;	pop hl
+	    ;	ex (sp), hl 	; CALLEE Convention
+__DIVI16_FAST:
+	    ld a, d
+	    xor h
+	    ex af, af'		; BIT 7 of a contains result
+	    bit 7, d		; DE is negative?
+	    jr z, __DIVI16A
+	    ld a, e			; DE = -DE
+	    cpl
+	    ld e, a
+	    ld a, d
+	    cpl
+	    ld d, a
+	    inc de
+__DIVI16A:
+	    bit 7, h		; HL is negative?
+	    call nz, __NEGHL
+__DIVI16B:
+	    call __DIVU16_FAST
+	    ex af, af'
+	    or a
+	    ret p	; return if positive
+	    jp __NEGHL
+__MODI16:    ; 16 bit modulus
+	    ; HL = Dividend, Stack Top = Divisor
+	    ;ex de, hl
+	    ;pop hl
+	    ;ex (sp), hl ; CALLEE Convention
+	    call __DIVI16_FAST
+	    ex de, hl	; hl = reminder (modulus)
+	    ; de = quotient
+	    ret
+	    pop namespace
+#line 3 "src/lib/arch/zx48k/runtime/printi16.asm"
+	    push namespace core
+__PRINTI16:	; Prints a 16bits signed in HL
+	    ; Converts 16 to 32 bits
+	    PROC
+	    LOCAL __PRINTU_LOOP
+	    ld a, h
+	    or a
+	    jp p, __PRINTU16
+	    call __PRINT_MINUS
+	    call __NEGHL
+__PRINTU16:
+	    ld b, 0
+__PRINTU_LOOP:
+	    ld a, h
+	    or l
+	    jp z, __PRINTU_START
+	    push bc
+	    ld de, 10
+	    call __DIVU16_FAST ; Divides by DE. DE = MODULUS at exit. Since < 256, E = Modulus
+	    pop bc
+	    ld a, e
+	    or '0'		  ; Stores ASCII digit (must be print in reversed order)
+	    push af
+	    inc b
+	    jp __PRINTU_LOOP ; Uses JP in loops
+	    ENDP
+	    pop namespace
+#line 3 "src/lib/arch/zx48k/runtime/printf16.asm"
+#line 1 "src/lib/arch/zx48k/runtime/neg32.asm"
+	    push namespace core
+__ABS32:
+	    bit 7, d
+	    ret z
+__NEG32: ; Negates DEHL (Two's complement)
+	    ld a, l
+	    cpl
+	    ld l, a
+	    ld a, h
+	    cpl
+	    ld h, a
+	    ld a, e
+	    cpl
+	    ld e, a
+	    ld a, d
+	    cpl
+	    ld d, a
+	    inc l
+	    ret nz
+	    inc h
+	    ret nz
+	    inc de
+	    ret
+	    pop namespace
+#line 4 "src/lib/arch/zx48k/runtime/printf16.asm"
+	    push namespace core
+__PRINTF16:	; Prints a 32bit 16.16 fixed point number
+	    PROC
+	    LOCAL __PRINT_FIX_LOOP
+	    LOCAL __PRINTF16_2
+	    bit 7, d
+	    jr z, __PRINTF16_2
+	    call __NEG32
+	    call __PRINT_MINUS
+__PRINTF16_2:
+	    push hl
+	    ex de, hl
+	    call __PRINTU16 ; Prints integer part
+	    pop hl
+	    ld a, h
+	    or l
+	    ret z		; Returns if integer
+	    push hl
+	    ld a, '.'
+	    call __PRINT_DIGIT	; Prints decimal point
+	    pop hl
+__PRINT_FIX_LOOP:
+	    ld a, h
+	    or l
+	    ret z		; Returns if no more decimals
+	    xor a
+	    ld d, h
+	    ld e, l
+	    ; Fast NUM * 10 multiplication
+	    add hl, hl	;
+	    adc a, a    ; AHL = AHL * 2  (= X * 2)
+	    add hl, hl  ;
+	    adc a, a    ; AHL = AHL * 2  (= X * 4)
+	    add hl, de  ;
+	    adc a, 0    ; AHL = AHL + DE (= X * 5)
+	    add hl, hl
+	    adc a, a    ; AHL = AHL * 2 (= X * 10)
+	    push hl
+	    or '0'
+	    call __PRINT_DIGIT
+	    pop hl
+	    jp __PRINT_FIX_LOOP
+	    ENDP
+	    pop namespace
+#line 410 "tests/functional/arch/cpc/showcase.bas"
+#line 1 "src/lib/arch/zx48k/runtime/printi32.asm"
+#line 1 "src/lib/arch/zx48k/runtime/arith/div32.asm"
+	    ; ---------------------------------------------------------
+	    push namespace core
+__DIVU32:    ; 32 bit unsigned division
+	    ; DEHL = Dividend, Stack Top = Divisor
+	    ; OPERANDS P = Dividend, Q = Divisor => OPERATION => P / Q
+	    ;
+	    ; Changes A, BC DE HL B'C' D'E' H'L'
+	    ; ---------------------------------------------------------
+	    exx
+	    pop hl   ; return address
+	    pop de   ; low part
+	    ex (sp), hl ; CALLEE Convention ; H'L'D'E' => Dividend
+__DIVU32START: ; Performs D'E'H'L' / HLDE
+	    ; Now switch to DIVIDEND = B'C'BC / DIVISOR = D'E'DE (A / B)
+	    push de ; push Lowpart(Q)
+	    ex de, hl	; DE = HL
+	    ld hl, 0
+	    exx
+	    ld b, h
+	    ld c, l
+	    pop hl
+	    push de
+	    ex de, hl
+	    ld hl, 0        ; H'L'HL = 0
+	    exx
+	    pop bc          ; Pop HightPart(B) => B = B'C'BC
+	    exx
+	    ld a, 32 ; Loop count
+__DIV32LOOP:
+	    sll c  ; B'C'BC << 1 ; Output most left bit to carry
+	    rl  b
+	    exx
+	    rl c
+	    rl b
+	    exx
+	    adc hl, hl
+	    exx
+	    adc hl, hl
+	    exx
+	    sbc hl,de
+	    exx
+	    sbc hl,de
+	    exx
+	    jp nc, __DIV32NOADD	; use JP inside a loop for being faster
+	    add hl, de
+	    exx
+	    adc hl, de
+	    exx
+	    dec bc
+__DIV32NOADD:
+	    dec a
+	    jp nz, __DIV32LOOP	; use JP inside a loop for being faster
+	    ; At this point, quotient is stored in B'C'BC and the reminder in H'L'HL
+	    push hl
+	    exx
+	    pop de
+	    ex de, hl ; D'E'H'L' = 32 bits modulus
+	    push bc
+	    exx
+	    pop de    ; DE = B'C'
+	    ld h, b
+	    ld l, c   ; DEHL = quotient D'E'H'L' = Modulus
+	    ret     ; DEHL = quotient, D'E'H'L' = Modulus
+__MODU32:    ; 32 bit modulus for 32bit unsigned division
+	    ; DEHL = Dividend, Stack Top = Divisor (DE, HL)
+	    exx
+	    pop hl   ; return address
+	    pop de   ; low part
+	    ex (sp), hl ; CALLEE Convention ; H'L'D'E' => Dividend
+	    call __DIVU32START	; At return, modulus is at D'E'H'L'
+__MODU32START:
+	    exx
+	    push de
+	    push hl
+	    exx
+	    pop hl
+	    pop de
+	    ret
+__DIVI32:    ; 32 bit signed division
+	    ; DEHL = Dividend, Stack Top = Divisor
+	    ; A = Dividend, B = Divisor => A / B
+	    exx
+	    pop hl   ; return address
+	    pop de   ; low part
+	    ex (sp), hl ; CALLEE Convention ; H'L'D'E' => Dividend
+__DIVI32START:
+	    exx
+	    ld a, d	 ; Save sign
+	    ex af, af'
+	    bit 7, d ; Negative?
+	    call nz, __NEG32 ; Negates DEHL
+	    exx		; Now works with H'L'D'E'
+	    ex af, af'
+	    xor h
+	    ex af, af'  ; Stores sign of the result for later
+	    bit 7, h ; Negative?
+	    ex de, hl ; HLDE = DEHL
+	    call nz, __NEG32
+	    ex de, hl
+	    call __DIVU32START
+	    ex af, af' ; Recovers sign
+	    and 128	   ; positive?
+	    ret z
+	    jp __NEG32 ; Negates DEHL and returns from there
+__MODI32:	; 32bits signed division modulus
+	    exx
+	    pop hl   ; return address
+	    pop de   ; low part
+	    ex (sp), hl ; CALLEE Convention ; H'L'D'E' => Dividend
+	    call __DIVI32START
+	    jp __MODU32START
+	    pop namespace
+#line 4 "src/lib/arch/zx48k/runtime/printi32.asm"
+	    push namespace core
+__PRINTI32:
+	    ld a, d
+	    or a
+	    jp p, __PRINTU32
+	    call __PRINT_MINUS
+	    call __NEG32
+__PRINTU32:
+	    PROC
+	    LOCAL __PRINTU_LOOP
+	    ld b, 0 ; Counter
+__PRINTU_LOOP:
+	    ld a, h
+	    or l
+	    or d
+	    or e
+	    jp z, __PRINTU_START
+	    push bc
+	    ld bc, 0
+	    push bc
+	    ld bc, 10
+	    push bc		  ; Push 00 0A (10 Dec) into the stack = divisor
+	    call __DIVU32 ; Divides by 32. D'E'H'L' contains modulo (L' since < 10)
+	    pop bc
+	    exx
+	    ld a, l
+	    or '0'		  ; Stores ASCII digit (must be print in reversed order)
+	    push af
+	    exx
+	    inc b
+	    jp __PRINTU_LOOP ; Uses JP in loops
+	    ENDP
+	    pop namespace
+#line 412 "tests/functional/arch/cpc/showcase.bas"
+#line 1 "src/lib/arch/zx48k/runtime/printi8.asm"
+#line 1 "src/lib/arch/zx48k/runtime/arith/div8.asm"
+	    ; --------------------------------
+	    push namespace core
+__DIVU8:	; 8 bit unsigned integer division
+	    ; Divides (Top of stack, High Byte) / A
+	    pop hl	; --------------------------------
+	    ex (sp), hl	; CALLEE
+__DIVU8_FAST:	; Does A / H
+	    ld l, h
+	    ld h, a		; At this point do H / L
+	    ld b, 8
+	    xor a		; A = 0, Carry Flag = 0
+__DIV8LOOP:
+	    sla	h
+	    rla
+	    cp	l
+	    jr	c, __DIV8NOSUB
+	    sub	l
+	    inc	h
+__DIV8NOSUB:
+	    djnz __DIV8LOOP
+	    ld	l, a		; save remainder
+	    ld	a, h		;
+	    ret			; a = Quotient,
+	    ; --------------------------------
+__DIVI8:		; 8 bit signed integer division Divides (Top of stack) / A
+	    pop hl		; --------------------------------
+	    ex (sp), hl
+__DIVI8_FAST:
+	    ld e, a		; store operands for later
+	    ld c, h
+	    or a		; negative?
+	    jp p, __DIV8A
+	    neg			; Make it positive
+__DIV8A:
+	    ex af, af'
+	    ld a, h
+	    or a
+	    jp p, __DIV8B
+	    neg
+	    ld h, a		; make it positive
+__DIV8B:
+	    ex af, af'
+	    call __DIVU8_FAST
+	    ld a, c
+	    xor l		; bit 7 of A = 1 if result is negative
+	    ld a, h		; Quotient
+	    ret p		; return if positive
+	    neg
+	    ret
+__MODU8:		; 8 bit module. REturns A mod (Top of stack) (unsigned operands)
+	    pop hl
+	    ex (sp), hl	; CALLEE
+__MODU8_FAST:	; __FASTCALL__ entry
+	    call __DIVU8_FAST
+	    ld a, l		; Remainder
+	    ret		; a = Modulus
+__MODI8:		; 8 bit module. REturns A mod (Top of stack) (For singed operands)
+	    pop hl
+	    ex (sp), hl	; CALLEE
+__MODI8_FAST:	; __FASTCALL__ entry
+	    call __DIVI8_FAST
+	    ld a, l		; remainder
+	    ret		; a = Modulus
+	    pop namespace
+#line 3 "src/lib/arch/zx48k/runtime/printi8.asm"
+	    push namespace core
+__PRINTI8:	; Prints an 8 bits number in Accumulator (A)
+	    ; Converts 8 to 32 bits
+	    or a
+	    jp p, __PRINTU8
+	    push af
+	    call __PRINT_MINUS
+	    pop af
+	    neg
+__PRINTU8:
+	    PROC
+	    LOCAL __PRINTU_LOOP
+	    ld b, 0 ; Counter
+__PRINTU_LOOP:
+	    or a
+	    jp z, __PRINTU_START
+	    push bc
+	    ld h, 10
+	    call __DIVU8_FAST ; Divides by 10. D'E'H'L' contains modulo (L' since < 10)
+	    pop bc
+	    ld a, l
+	    or '0'		  ; Stores ASCII digit (must be print in reversed order)
+	    push af
+	    ld a, h
+	    inc b
+	    jp __PRINTU_LOOP ; Uses JP in loops
+	    ENDP
+	    pop namespace
+#line 413 "tests/functional/arch/cpc/showcase.bas"
+#line 1 "src/lib/arch/zx48k/runtime/printstr.asm"
 #line 1 "src/lib/arch/zx48k/runtime/mem/free.asm"
 ; vim: ts=4:et:sw=4:
 	; Copyleft (K) by Jose M. Rodriguez de la Rosa
@@ -1873,5 +2750,11 @@ __PRINT_STR:
 	    jp __PRINT_STR_LOOP
 	    ENDP
 	    pop namespace
-#line 27 "tests/functional/arch/cpc/print_hello.bas"
+#line 414 "tests/functional/arch/cpc/showcase.bas"
+#line 1 "src/lib/arch/zx48k/runtime/printu16.asm"
+#line 415 "tests/functional/arch/cpc/showcase.bas"
+#line 1 "src/lib/arch/zx48k/runtime/printu32.asm"
+#line 416 "tests/functional/arch/cpc/showcase.bas"
+#line 1 "src/lib/arch/zx48k/runtime/printu8.asm"
+#line 417 "tests/functional/arch/cpc/showcase.bas"
 	END

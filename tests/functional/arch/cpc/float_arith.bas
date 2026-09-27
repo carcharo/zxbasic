@@ -1,11 +1,11 @@
-' Phase 1 golden test for --arch cpc: floating point linkage.
+' Golden test for --arch cpc: floating point linkage.
 ' Float arithmetic goes through the 25 `rst 30h` copies (see
-' src/lib/arch/cpc/runtime/arith/addf.asm and friends) and the Phase 1
-' fp_calc.asm placeholder, which traps via .core.__CPC_NOT_IMPLEMENTED
-' -- see that file's header. This snapshots the current stubbed linkage
-' (RST 6 vector install, the rst 30h copies, stackf.asm's stub) rather
-' than working output; it exists to catch accidental drift until Phase 3
-' ports a real calculator.
+' src/lib/arch/cpc/runtime/arith/addf.asm and friends) and fp_calc.asm's
+' real calculator engine (ported from zx81sd, Phase 3 -- see that file's
+' header). This is a compile-only snapshot (see tests/functional/test.py);
+' it exists to catch accidental drift in the generated asm. Runtime
+' output is checked separately in the emulator (cpc-port-notes.md Phase 3
+' results) and in tests/functional/arch/cpc/float_heavy.bas.
 DIM x AS FLOAT
 DIM y AS FLOAT
 x = 1.5

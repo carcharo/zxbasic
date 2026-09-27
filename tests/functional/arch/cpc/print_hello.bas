@@ -1,8 +1,7 @@
-' Phase 1 golden test for --arch cpc: PRINT statement linkage.
-' PRINT itself is a Phase 1 stub (src/lib/arch/cpc/runtime/print.asm
-' traps via .core.__CPC_NOT_IMPLEMENTED -- see that file's header), so
-' this snapshots the current stubbed linkage rather than working output;
-' it exists to catch accidental drift until Phase 2/4a port print.asm
-' for real.
+' Phase 2 milestone golden test for --arch cpc: PRINT "Hello CPC".
+' print.asm is real now (firmware TXT_OUTPUT via the gate, see that
+' file's header for the control-code translation table); this snapshots
+' the compiled linkage (COPY_ATTR / __PRINTSTR / PRINT_EOL) to catch
+' accidental drift.
 PRINT "HELLO CPC"
 END
