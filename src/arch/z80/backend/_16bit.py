@@ -926,7 +926,7 @@ class Bits16:
 
             output = cls.get_oper(op1)
             if op == 1:
-                output.append("srl h")
+                output.append("sra h")
                 output.append("rr l")
                 output.append("push hl")
                 return output

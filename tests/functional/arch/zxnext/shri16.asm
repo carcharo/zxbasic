@@ -30,7 +30,7 @@ _b:
 	djnz .LABEL.__LABEL0
 .LABEL.__LABEL1:
 	ld (_a), hl
-	srl h
+	sra h
 	rr l
 	ld (_a), hl
 	pop hl
