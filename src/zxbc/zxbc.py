@@ -14,7 +14,7 @@ from io import StringIO
 
 import src.api.optimize
 from src import arch
-from src.api import config, debug
+from src.api import config, debug, errmsg
 from src.api import global_ as gl
 from src.api.config import OPTIONS
 from src.api.utils import open_file
@@ -71,6 +71,50 @@ def output(memory, ofile=None):
 def save_config(options: Namespace) -> None:
     if not gl.has_errors and options.save_config:
         src.api.config.save_config_into_file(options.save_config, src.api.config.ConfigSections.ZXBC)
+
+
+def check_memory_layout(backend, heap_in_use: bool, org: int, length: int) -> None:
+    """Post-assembly sanity check for the compiled binary's memory layout.
+
+    zxbasm's assembler only ever sees a stream of instructions -- it has
+    no notion of what else lives in memory, so it can't catch code+data
+    running into a heap placed at a fixed address, nor an architecture's
+    own absolute ceiling for code+data. Both become checkable only now,
+    once assembly is done and the binary's real origin and length are
+    known.
+
+    :param backend: the target architecture's Backend instance. Its
+        MAX_CODE_ADDRESS (None by default) lets an arch declare an
+        absolute upper bound for code+data, e.g. the cpc's private
+        runtime block.
+    :param heap_in_use: whether the heap start EQU was actually emitted
+        (i.e. the program uses something that requires a heap). A heap
+        placed at a fixed address that the program never uses can't be
+        run into.
+    :param org: the assembled binary's origin address.
+    :param length: the assembled binary's length in bytes.
+    """
+    end = org + length  # first address past the compiled binary
+
+    max_code_address = backend.MAX_CODE_ADDRESS
+    if max_code_address is not None and end > max_code_address:
+        errmsg.error(
+            0,
+            "compiled code+data ends at 0x%04X, past this architecture's "
+            "memory limit of 0x%04X" % (end, max_code_address),
+        )
+
+    heap_address = OPTIONS.heap_address
+    if not heap_in_use or heap_address is None:
+        return
+
+    heap_end = heap_address + OPTIONS.heap_size
+    if org < heap_end and heap_address < end:  # [org, end) and [heap, heap_end) intersect
+        errmsg.error(
+            0,
+            "compiled code+data (0x%04X-0x%04X) overlaps the heap "
+            "(0x%04X-0x%04X)" % (org, end - 1, heap_address, heap_end - 1),
+        )
 
 
 def main(args=None, emitter=None) -> int:
@@ -209,6 +253,14 @@ def main(args=None, emitter=None) -> int:
         + backend.emit_epilogue()
     )
 
+    # The heap start EQU (OPTIONS.heap_size_label) is only emitted by
+    # emit_prologue() when the program actually requires a heap (see
+    # e.g. src/arch/cpc/backend/main.py:emit_prologue). Recording that
+    # here -- rather than duplicating the REQUIRES/INITS test that
+    # decides it -- lets check_memory_layout() below stay architecture-
+    # agnostic.
+    heap_in_use = any(OPTIONS.heap_size_label in line for line in asm_output)
+
     if OPTIONS.output_file_type == FileType.ASM:  # Only output assembler file
         with open_file(OPTIONS.output_filename, "wt", "utf-8") as output_file:
             output(asm_output, output_file)
@@ -217,6 +269,24 @@ def main(args=None, emitter=None) -> int:
         output(asm_output, fout)
         asmparse.assemble(fout.getvalue())
         fout.close()
+        if gl.has_errors:
+            return 5  # Error in assembly
+
+        # Check the memory layout before writing any output: org and
+        # length are only known now that assembly is done, and it's
+        # cheap to ask (MEMORY.dump() below is exactly what
+        # generate_binary() does internally to get them; asking again
+        # here is a no-op the second time, since dump() only resolves
+        # each pending value once).
+        memory = asmparse.MEMORY
+        if memory is not None and memory.memory_bytes:
+            org, binary = memory.dump()
+            if gl.has_errors:
+                return 5  # Error in assembly
+            check_memory_layout(backend, heap_in_use, org, len(binary))
+            if gl.has_errors:
+                return 5  # Memory layout error (heap overlap or past arch limit)
+
         asmparse.generate_binary(
             OPTIONS.output_filename,
             OPTIONS.output_file_type,

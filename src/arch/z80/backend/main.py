@@ -148,6 +148,15 @@ class Backend(BackendInterface):
     _QUAD_TABLE: dict[str, ICInfo] = {}
     MEMORY: list[Quad] = []  # Must be initialized by with init()
 
+    # Absolute upper bound (exclusive) for compiled code+data, in address
+    # space, or None if this architecture imposes none beyond the generic
+    # 64K limit. Checked by zxbc's post-assembly memory-layout check
+    # (src/zxbc/zxbc.py) once the binary's real origin and length are
+    # known. A subclass overrides this when something else lives at a
+    # fixed address above the code (e.g. the cpc's private runtime
+    # block).
+    MAX_CODE_ADDRESS: int | None = None
+
     def _set_quad_table(self):
         """Lowlevel (to ASM) instructions implementation"""
         self._QUAD_TABLE: dict[ICInstruction, ICInfo] = {

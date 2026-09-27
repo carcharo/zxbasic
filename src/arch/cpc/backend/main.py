@@ -49,6 +49,11 @@ _MEM_TOP = 0xA67B  # boot HIMEM with AMSDOS (measured); code+data must end at
 
 
 class Backend(Z80Backend):
+    # Code+data must stay below the private runtime block, whether or not
+    # a heap is in use (see the memory map above). Checked by zxbc's
+    # generic post-assembly memory-layout check.
+    MAX_CODE_ADDRESS = _PRIV_BASE
+
     def init(self):
         super().init()
 
