@@ -888,6 +888,15 @@ def entry_point(args=None):
 
     config.OPTIONS.architecture = options.arch
 
+    # Same automatic arch macro zxbc's set_option_defines() defines (e.g.
+    # __ZX48K__), so code preprocessed standalone through zxbpp can also
+    # #ifdef on the target architecture. ID_TABLE was already populated by
+    # init() above, before the architecture was known, so it's set directly
+    # here rather than via reset_id_table().
+    arch_macro = f"__{options.arch.upper()}__"
+    config.OPTIONS.__DEFINES[arch_macro] = ""
+    ID_TABLE.set(arch_macro, lineno=0, value="")
+
     if options.stderr:
         config.OPTIONS.stderr_filename = options.stderr
         config.OPTIONS.stderr = utils.open_file(config.OPTIONS.stderr_filename, "wt", "utf-8")

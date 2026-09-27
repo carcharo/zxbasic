@@ -185,4 +185,8 @@ def set_option_defines() -> None:
     if OPTIONS.enable_break:
         OPTIONS.__DEFINES["__ENABLE_BREAK__"] = ""
 
+    # Always define a macro identifying the target architecture (e.g.
+    # __ZX48K__, __ZXNEXT__, __ZX81SD__), so BASIC/ASM code can #ifdef on it.
+    OPTIONS.__DEFINES[f"__{OPTIONS.architecture.upper()}__"] = ""
+
     OPTIONS.__DEFINES["__OPT_STRATEGY__"] = OPTIONS.opt_strategy

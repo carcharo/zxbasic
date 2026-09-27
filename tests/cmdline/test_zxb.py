@@ -75,3 +75,42 @@ def test_cmdline_should_override_config_file(file_bas, file_bin, config_file):
         zxbc.main(["--parse-only", "-F", config_file, "--org", "1234", file_bas, "-o", file_bin])
         assert zxbc.OPTIONS.org == 1234, "Commandline should override config file"
         assert zxbc.OPTIONS.optimization_level == 3, "Commandline should override config file"
+
+
+def test_default_arch_defines_zx48k_macro_only(file_bas, file_bin):
+    """The default --arch (zx48k) should automatically #define __ZX48K__,
+    and no other architecture's macro."""
+    with EnsureRemoveFile(file_bin):
+        zxbc.main(["--parse-only", file_bas, "-o", file_bin])
+        defines = zxbc.OPTIONS["__DEFINES"].value
+        assert "__ZX48K__" in defines
+        assert "__ZXNEXT__" not in defines
+        assert "__ZX81SD__" not in defines
+
+
+def test_arch_zxnext_defines_zxnext_macro(file_bas, file_bin):
+    with EnsureRemoveFile(file_bin):
+        zxbc.main(["--parse-only", "--arch", "zxnext", file_bas, "-o", file_bin])
+        defines = zxbc.OPTIONS["__DEFINES"].value
+        assert "__ZXNEXT__" in defines
+        assert "__ZX48K__" not in defines
+
+
+def test_arch_zx81sd_defines_zx81sd_macro(file_bas, file_bin):
+    with EnsureRemoveFile(file_bin):
+        zxbc.main(["--parse-only", "--arch", "zx81sd", file_bas, "-o", file_bin])
+        assert "__ZX81SD__" in zxbc.OPTIONS["__DEFINES"].value
+
+
+def test_dash_d_arch_macro_still_works_without_warnings(file_bas, file_bin):
+    """zx81sd's build scripts pass -D __ZX81SD__ explicitly on top of
+    --arch zx81sd (which now defines it automatically too). This must
+    keep working and must not raise a macro-redefinition warning."""
+    from src.api import global_
+
+    warnings_before = global_.has_warnings
+    with EnsureRemoveFile(file_bin):
+        zxbc.main(["--parse-only", "--arch", "zx81sd", "-D", "__ZX81SD__", file_bas, "-o", file_bin])
+        assert "__ZX81SD__" in zxbc.OPTIONS["__DEFINES"].value
+        assert global_.has_warnings == warnings_before, "-D __ZX81SD__ should not warn"
+
