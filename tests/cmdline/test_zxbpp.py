@@ -9,6 +9,7 @@ import os
 
 import pytest
 
+from src import arch
 from src.api import config
 from src.zxbpp import zxbpp
 
@@ -44,3 +45,41 @@ def test_arch_zx81sd_defines_zx81sd_macro(file_bas, tmp_path):
     assert result == 0
     assert "__ZX81SD__" in config.OPTIONS["__DEFINES"].value
 
+
+def test_arch_parents_declares_zx81sd_inherits_zx48k():
+    """zx81sd is the architecture that inherits another one's
+    stdlib/runtime include search path."""
+    assert arch.ARCH_PARENTS == {"zx81sd": "zx48k"}
+
+
+def test_set_include_path_zx81sd_inherits_zx48k_unchanged():
+    """zx81sd's include search path must stay byte-for-byte identical to
+    the previous hard-coded special case: its own stdlib/runtime first,
+    then zx48k's, in that order."""
+    config.OPTIONS.architecture = "zx81sd"
+    zxbpp.init()
+    zxbpp.set_include_path()
+
+    zx81sd_pwd = zxbpp.get_include_path("zx81sd")
+    zx48k_pwd = zxbpp.get_include_path("zx48k")
+
+    assert zxbpp.INCLUDE_MAP["zx81sd"] == [
+        os.path.join(zx81sd_pwd, "stdlib"),
+        os.path.join(zx81sd_pwd, "runtime"),
+        os.path.join(zx48k_pwd, "stdlib"),
+        os.path.join(zx48k_pwd, "runtime"),
+    ]
+
+
+def test_set_include_path_zx48k_has_no_parent_fallback():
+    """An architecture with no entry in ARCH_PARENTS only searches its own
+    stdlib/runtime dirs."""
+    config.OPTIONS.architecture = "zx48k"
+    zxbpp.init()
+    zxbpp.set_include_path()
+
+    zx48k_pwd = zxbpp.get_include_path("zx48k")
+    assert zxbpp.INCLUDE_MAP["zx48k"] == [
+        os.path.join(zx48k_pwd, "stdlib"),
+        os.path.join(zx48k_pwd, "runtime"),
+    ]

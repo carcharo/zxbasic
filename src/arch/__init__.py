@@ -19,6 +19,15 @@ __all__ = (
 AVAILABLE_ARCHITECTURES = __all__
 target: ModuleType
 
+# Some architectures inherit their stdlib/runtime include search path from a
+# "parent" architecture: a child arch's own files shadow the parent's (its
+# own files are searched first), but anything missing from its tree falls
+# back to the parent's. Chains (a parent with a parent of its own) are
+# followed too. See src.zxbpp.zxbpp.set_include_path().
+ARCH_PARENTS: dict[str, str] = {
+    "zx81sd": "zx48k",
+}
+
 
 def set_target_arch(target_arch: str):
     global target

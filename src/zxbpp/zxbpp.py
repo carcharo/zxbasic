@@ -153,17 +153,27 @@ def get_include_path(arch: str = "") -> str:
 def set_include_path():
     global INCLUDEPATH
 
+    from src import arch
+
     INCLUDE_MAP.clear()
 
+    own_paths: dict[str, list[str]] = {}
     for arch_ in AVAILABLE_ARCHITECTURES:
         pwd = get_include_path(arch_)
-        INCLUDE_MAP[arch_] = [os.path.join(pwd, "stdlib"), os.path.join(pwd, "runtime")]
+        own_paths[arch_] = [os.path.join(pwd, "stdlib"), os.path.join(pwd, "runtime")]
+        INCLUDE_MAP[arch_] = list(own_paths[arch_])
 
-    # zx81sd inherits runtime files from zx48k (only overrides specific ones).
-    # zx81sd paths take priority: its own files shadow zx48k equivalents.
-    if "zx81sd" in INCLUDE_MAP:
-        zx48k_pwd = get_include_path("zx48k")
-        INCLUDE_MAP["zx81sd"].extend([os.path.join(zx48k_pwd, "stdlib"), os.path.join(zx48k_pwd, "runtime")])
+    # A child arch inherits its parent's stdlib/runtime search path (see
+    # src.arch.ARCH_PARENTS): its own files shadow the parent's (they're
+    # searched first), but anything missing from its tree falls back to the
+    # parent's, and so on up the chain.
+    for arch_ in AVAILABLE_ARCHITECTURES:
+        seen = {arch_}
+        parent = arch.ARCH_PARENTS.get(arch_)
+        while parent and parent in own_paths and parent not in seen:
+            INCLUDE_MAP[arch_].extend(own_paths[parent])
+            seen.add(parent)
+            parent = arch.ARCH_PARENTS.get(parent)
 
     INCLUDEPATH = INCLUDE_MAP.get(config.OPTIONS.architecture, [])
 
