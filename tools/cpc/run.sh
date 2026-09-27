@@ -18,7 +18,7 @@
 #
 # --shot runs cap32 with SDL_VIDEODRIVER=dummy and a small autocmd script
 # (load, delay, screenshot, exit) instead of opening an interactive
-# window; the screenshot lands in build/shots/. Useful for CI or an
+# window; the screenshot lands in build/shots/ (SHOT_DELAYS=n sets the wait). Useful for CI or an
 # unattended sanity check before the Phase 5a test harness exists.
 #
 # Caprice32 is found at $CAP32, or, by default, as a sibling checkout:
@@ -103,12 +103,15 @@ if [[ "$SHOT" -eq 1 ]]; then
         TIMEOUT_BIN="gtimeout"
     fi
 
+    # Each CAP32_DELAY is a short pause; raise SHOT_DELAYS for slow programs.
+    DELAYS=()
+    for ((i = 0; i < ${SHOT_DELAYS:-6}; i++)); do DELAYS+=(-a CAP32_DELAY); done
+
     echo "run.sh: running headlessly (run\"$AMSDOS_STEM), screenshot -> $SHOT_DIR"
     SDL_VIDEODRIVER=dummy "$TIMEOUT_BIN" 30 "$CAP32" \
         -O "file.sdump_dir=$SHOT_DIR" \
         -a "run\"$AMSDOS_STEM" \
-        -a 'CAP32_DELAY' \
-        -a 'CAP32_DELAY' \
+        "${DELAYS[@]}" \
         -a 'CAP32_SCRNSHOT' \
         -a 'CAP32_EXIT' \
         "$DSK_ABS"
