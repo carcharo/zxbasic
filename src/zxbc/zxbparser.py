@@ -217,6 +217,15 @@ def make_number(value, lineno: int, type_=None):
     return sym.NUMBER(value, type_=type_, lineno=lineno)
 
 
+def graphics_coord_type(default: sym.TYPE) -> sym.TYPE:
+    """Type PLOT and CIRCLE coordinates are cast to. The Spectrum's screen
+    fits in a byte; an architecture with a bigger one names a wider type in
+    its GRAPHICS_COORD_TYPE (e.g. "integer" for cpc).
+    """
+    name = getattr(arch.target, "GRAPHICS_COORD_TYPE", None)
+    return Type.by_name(name) if name else default
+
+
 def make_typecast(type_: sym.TYPING, node: sym.EXPR | None, lineno: int) -> sym.TYPECAST | sym.EXPR | None:
     """Wrapper: returns a Typecast node"""
     if node is None or node.type_ is None:
@@ -979,8 +988,8 @@ class ZXBasicTransformer(Transformer):
         p0 = make_sentence(
             get_lineno(items[0]),
             "PLOT",
-            make_typecast(Type.ubyte, items[1], get_lineno(items[2])),
-            make_typecast(Type.ubyte, items[3], get_lineno(items[2])),
+            make_typecast(graphics_coord_type(Type.ubyte), items[1], get_lineno(items[2])),
+            make_typecast(graphics_coord_type(Type.ubyte), items[3], get_lineno(items[2])),
         )
         return p0
 
@@ -988,8 +997,8 @@ class ZXBasicTransformer(Transformer):
         p0 = make_sentence(
             get_lineno(items[0]),
             "PLOT",
-            make_typecast(Type.ubyte, items[2], get_lineno(items[3])),
-            make_typecast(Type.ubyte, items[4], get_lineno(items[3])),
+            make_typecast(graphics_coord_type(Type.ubyte), items[2], get_lineno(items[3])),
+            make_typecast(graphics_coord_type(Type.ubyte), items[4], get_lineno(items[3])),
             items[1],
         )
         return p0
@@ -1038,9 +1047,9 @@ class ZXBasicTransformer(Transformer):
         p0 = make_sentence(
             get_lineno(items[0]),
             "CIRCLE",
-            make_typecast(Type.byte_, items[1], get_lineno(items[2])),
-            make_typecast(Type.byte_, items[3], get_lineno(items[4])),
-            make_typecast(Type.byte_, items[5], get_lineno(items[4])),
+            make_typecast(graphics_coord_type(Type.byte_), items[1], get_lineno(items[2])),
+            make_typecast(graphics_coord_type(Type.byte_), items[3], get_lineno(items[4])),
+            make_typecast(graphics_coord_type(Type.byte_), items[5], get_lineno(items[4])),
         )
         return p0
 
@@ -1048,9 +1057,9 @@ class ZXBasicTransformer(Transformer):
         p0 = make_sentence(
             get_lineno(items[0]),
             "CIRCLE",
-            make_typecast(Type.byte_, items[2], get_lineno(items[3])),
-            make_typecast(Type.byte_, items[4], get_lineno(items[5])),
-            make_typecast(Type.byte_, items[6], get_lineno(items[5])),
+            make_typecast(graphics_coord_type(Type.byte_), items[2], get_lineno(items[3])),
+            make_typecast(graphics_coord_type(Type.byte_), items[4], get_lineno(items[5])),
+            make_typecast(graphics_coord_type(Type.byte_), items[6], get_lineno(items[5])),
             items[1],
         )
         return p0

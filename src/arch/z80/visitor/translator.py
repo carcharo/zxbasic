@@ -11,6 +11,7 @@ from typing import Any, NamedTuple
 import src.api.errmsg
 import src.api.global_ as gl
 import src.api.tmp_labels
+from src import arch
 from src.api import check
 from src.api.constants import CLASS, CONVENTION, SCOPE, TYPE
 from src.api.debug import __DEBUG__
@@ -882,7 +883,7 @@ class Translator(TranslatorVisitor):
 
     def visit_BEEP(self, node):
         if node.children[0].token == node.children[1].token == "NUMBER":  # BEEP <const>, <const>
-            DE, HL = src.arch.zx48k.beep.getDEHL(float(node.children[0].t), float(node.children[1].t))
+            DE, HL = arch.target.beep.getDEHL(float(node.children[0].t), float(node.children[1].t))
             self.ic_param(TYPE.uinteger, HL)
             self.ic_fparam(TYPE.uinteger, DE)
             self.runtime_call(RuntimeLabel.BEEPER, 0)  # Procedure call. Discard return
