@@ -10,6 +10,7 @@
 import re
 import sys
 from argparse import Namespace
+from collections.abc import Collection
 from io import StringIO
 
 import src.api.optimize
@@ -73,7 +74,7 @@ def save_config(options: Namespace) -> None:
         src.api.config.save_config_into_file(options.save_config, src.api.config.ConfigSections.ZXBC)
 
 
-def check_memory_layout(backend, heap_in_use: bool, org: int, length: int) -> None:
+def check_memory_layout(backend, heap_in_use: bool, org: int, length: int, labels: Collection[str] = ()) -> None:
     """Post-assembly sanity check for the compiled binary's memory layout.
 
     zxbasm's assembler only ever sees a stream of instructions -- it has
@@ -93,8 +94,31 @@ def check_memory_layout(backend, heap_in_use: bool, org: int, length: int) -> No
         run into.
     :param org: the assembled binary's origin address.
     :param length: the assembled binary's length in bytes.
+    :param labels: the global labels defined in the assembled program.
+        A backend's RESERVED_RANGE_LABELS ({label: (start, end, reason)},
+        empty by default) reserves [start, end) whenever that label is
+        defined -- i.e. only in programs that link the runtime code
+        defining it -- and neither code+data nor the heap may overlap it.
     """
     end = org + length  # first address past the compiled binary
+    heap_address = OPTIONS.heap_address if heap_in_use else None
+    heap_used = heap_address is not None
+
+    for label, (start, stop, reason) in getattr(backend, "RESERVED_RANGE_LABELS", {}).items():
+        if label not in labels:
+            continue
+        if org < stop and start < end:
+            errmsg.error(
+                0,
+                "compiled code+data (0x%04X-0x%04X) overlaps 0x%04X-0x%04X, reserved because %s"
+                % (org, end - 1, start, stop - 1, reason),
+            )
+        if heap_used and heap_address < stop and start < heap_address + OPTIONS.heap_size:
+            errmsg.error(
+                0,
+                "the heap (0x%04X-0x%04X) overlaps 0x%04X-0x%04X, reserved because %s"
+                % (heap_address, heap_address + OPTIONS.heap_size - 1, start, stop - 1, reason),
+            )
 
     max_code_address = backend.MAX_CODE_ADDRESS
     if max_code_address is not None and end > max_code_address:
@@ -104,8 +128,7 @@ def check_memory_layout(backend, heap_in_use: bool, org: int, length: int) -> No
             "memory limit of 0x%04X" % (end, max_code_address),
         )
 
-    heap_address = OPTIONS.heap_address
-    if not heap_in_use or heap_address is None:
+    if not heap_used:
         return
 
     heap_end = heap_address + OPTIONS.heap_size
@@ -283,7 +306,7 @@ def main(args=None, emitter=None) -> int:
             org, binary = memory.dump()
             if gl.has_errors:
                 return 5  # Error in assembly
-            check_memory_layout(backend, heap_in_use, org, len(binary))
+            check_memory_layout(backend, heap_in_use, org, len(binary), memory.global_labels.keys())
             if gl.has_errors:
                 return 5  # Memory layout error (heap overlap or past arch limit)
 
