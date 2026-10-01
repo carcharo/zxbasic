@@ -15,6 +15,7 @@
 #   tools/cpc/run.sh prog.bas [extra zxbc args...]
 #   tools/cpc/run.sh prog.bin
 #   tools/cpc/run.sh --shot prog.bas|prog.bin   # headless, one screenshot
+#   CPC_MODEL=464 tools/cpc/run.sh ...         # emulate a 464 (or 664/6128)
 #
 # --shot runs cap32 with SDL_VIDEODRIVER=dummy and a small autocmd script
 # (load, delay, screenshot, exit) instead of opening an interactive
@@ -89,6 +90,18 @@ echo "run.sh: packaging $BIN_ABS -> $DSK_ABS"
 python3 "$MKDSK" -o "$DSK_ABS" --load 0x1000 --exec 0x1000 --name "$AMSDOS_STEM.BIN" "$BIN_ABS"
 
 CAP32="${CAP32:-$REPO_ROOT/../caprice32/cap32}"
+
+# CPC_MODEL=464|664|6128 (default 6128). A 464 gets the DDI-1 disc ROM
+# in slot 7, as a real 464 with a disc drive has.
+case "${CPC_MODEL:-6128}" in
+    464) MODEL_OPTS=(-O system.model=0 -O rom.slot07=amsdos.rom) ;;
+    664) MODEL_OPTS=(-O system.model=1) ;;
+    6128) MODEL_OPTS=(-O system.model=2) ;;
+    *)
+        echo "run.sh: error: CPC_MODEL must be 464, 664 or 6128" >&2
+        exit 1
+        ;;
+esac
 if [[ ! -x "$CAP32" ]]; then
     echo "run.sh: error: Caprice32 not found/executable at $CAP32 (set CAP32=/path/to/cap32)" >&2
     exit 1
@@ -104,18 +117,22 @@ if [[ "$SHOT" -eq 1 ]]; then
     fi
 
     # Each CAP32_DELAY is a short pause; raise SHOT_DELAYS for slow programs.
-    DELAYS=()
-    for ((i = 0; i < ${SHOT_DELAYS:-6}; i++)); do DELAYS+=(-a CAP32_DELAY); done
+    # They go in one -a token with the screenshot: cap32 types RETURN after
+    # every -a token, and a RETURN would satisfy the program's own END key
+    # wait and reset it before the screenshot.
+    SHOT_CMD=""
+    for ((i = 0; i < ${SHOT_DELAYS:-6}; i++)); do SHOT_CMD+="CAP32_DELAY"; done
+    SHOT_CMD+="CAP32_SCRNSHOT"
 
     echo "run.sh: running headlessly (run\"$AMSDOS_STEM), screenshot -> $SHOT_DIR"
     SDL_VIDEODRIVER=dummy "$TIMEOUT_BIN" 30 "$CAP32" \
+        "${MODEL_OPTS[@]}" \
         -O "file.sdump_dir=$SHOT_DIR" \
         -a "run\"$AMSDOS_STEM" \
-        "${DELAYS[@]}" \
-        -a 'CAP32_SCRNSHOT' \
+        -a "$SHOT_CMD" \
         -a 'CAP32_EXIT' \
         "$DSK_ABS"
 else
     echo "run.sh: launching Caprice32 (a window should open)"
-    "$CAP32" "$DSK_ABS" -a "run\"$AMSDOS_STEM"
+    "$CAP32" "${MODEL_OPTS[@]}" "$DSK_ABS" -a "run\"$AMSDOS_STEM"
 fi
