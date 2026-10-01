@@ -98,7 +98,7 @@ def test_cpc_beep_out_of_range(duration, pitch):
         cpc_beep.getDEHL(duration, pitch)
 
 
-@pytest.mark.parametrize("lib", ["attr.bas", "screen.bas", "sinclair.bas", "print42.bas", "print64.bas"])
+@pytest.mark.parametrize("lib", ["attr.bas", "sinclair.bas", "print42.bas", "print64.bas"])
 def test_spectrum_only_stdlib_is_a_clear_error_on_cpc(tmp_path, lib):
     # A subprocess, not zxbc.main(): main() keeps its error stream in
     # OPTIONS and doesn't flush it, so in-process capture is unreliable.

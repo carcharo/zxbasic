@@ -1121,8 +1121,8 @@ INK_TMP:
 	;
 ; Amstrad CPC: INVERSE only touches P_FLAG by name (no ROM/HW), kept
 	; byte-for-byte identical to zx48k's. INVERSE_TMP tail-calls into
-	; copy_attr.asm's __SET_ATTR_MODE, which traps (see copy_attr.asm), so is
-	; dead code for now.
+	; copy_attr.asm's __SET_ATTR_MODE, which applies it to the text pens at
+	; once; PLOT/DRAW/CIRCLE read it in gfx.asm (plot in the paper colour).
 	    push namespace core
 INVERSE:
 	    PROC
@@ -1237,7 +1237,8 @@ PAPER_TMP:
 	;   23  TAB -> consumes 2 bytes (only the first is used, matching
 	;       zx48k) and pads with spaces up to that column, modulo the
 ;       screen width (TXT_COLS: 20/40/80 by mode)
-	;   32-255  printed via TXT_OUTPUT
+	;   32-255  printed via TXT_OUTPUT; 128-143 (Spectrum block graphics)
+	;           translated to the CPC's own quadrant characters first
 	;
 ; Phase-3 printer echo (-D __CPC_PRINTER_ECHO__, cpcbuild's cpcrun.py):
 	; every character actually sent to TXT_OUTPUT is mirrored to the
@@ -1362,7 +1363,7 @@ __SAVE_S_POSN:
 	    ret
 	    ENDP
 	    pop namespace
-#line 80 "src/lib/arch/cpc/runtime/print.asm"
+#line 81 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/error.asm"
 	; Simple error control routines
 	;
@@ -1522,7 +1523,7 @@ __PDA_SKIP:
 	    ret
 	    ENDP
 	    pop namespace
-#line 82 "src/lib/arch/cpc/runtime/print.asm"
+#line 83 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/zx48k/runtime/table_jump.asm"
 	    push namespace core
 JUMP_HL_PLUS_2A: ; Does JP (HL + A*2) Modifies DE. Modifies A
@@ -1539,7 +1540,7 @@ JUMP_HL_PLUS_DE: ; Does JP (HL + DE)
 CALL_HL:
 	    jp (hl)
 	    pop namespace
-#line 83 "src/lib/arch/cpc/runtime/print.asm"
+#line 84 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/flash.asm"
 	; Sets flash flag in ATTR_P permanently
 ; Parameter: Paper color in A register
@@ -1580,7 +1581,7 @@ FLASH_TMP:
 	    jr __SET_FLASH
 	    ENDP
 	    pop namespace
-#line 86 "src/lib/arch/cpc/runtime/print.asm"
+#line 87 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/bright.asm"
 	; Sets bright flag in ATTR_P permanently
 ; Parameter: Paper color in A register
@@ -1621,15 +1622,15 @@ BRIGHT_TMP:
 	    jr __SET_BRIGHT
 	    ENDP
 	    pop namespace
-#line 87 "src/lib/arch/cpc/runtime/print.asm"
+#line 88 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/over.asm"
 	; Sets OVER flag in P_FLAG permanently
 ; Parameter: OVER flag in bit 0 of A register
 	;
 ; Amstrad CPC: same as inverse.asm -- OVER only touches FLAGS2/P_FLAG by
-	; name (no ROM/HW), kept byte-for-byte identical. OVER_TMP is dead code
-	; until print.asm is real (its tail call into copy_attr.asm's
-	; __SET_ATTR_MODE traps).
+	; name (no ROM/HW), kept byte-for-byte identical. OVER 1 is XOR for
+	; PLOT/DRAW/CIRCLE (gfx.asm, the firmware's graphics write mode) and is
+; ignored for text: the firmware has no XOR text mode (notes.md Q5).
 	    push namespace core
 OVER:
 	    PROC
@@ -1665,7 +1666,7 @@ OVER_TMP:
 	    jp __SET_ATTR_MODE
 	    ENDP
 	    pop namespace
-#line 88 "src/lib/arch/cpc/runtime/print.asm"
+#line 89 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/bold.asm"
 	; Sets BOLD flag in P_FLAG permanently
 ; Parameter: BOLD flag in bit 0 of A register
@@ -1696,7 +1697,7 @@ BOLD_TMP:
 	    ret
 	    ENDP
 	    pop namespace
-#line 90 "src/lib/arch/cpc/runtime/print.asm"
+#line 91 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/italic.asm"
 	; Sets ITALIC flag in P_FLAG permanently
 ; Parameter: ITALIC flag in bit 0 of A register
@@ -1729,9 +1730,9 @@ ITALIC_TMP:
 	    ret
 	    ENDP
 	    pop namespace
-#line 91 "src/lib/arch/cpc/runtime/print.asm"
+#line 92 "src/lib/arch/cpc/runtime/print.asm"
 	    push namespace core
-#line 117 "src/lib/arch/cpc/runtime/print.asm"
+#line 118 "src/lib/arch/cpc/runtime/print.asm"
 ; __PRINTCHAR: prints the character/control code in A.
 	; Preserves BC and HL (printstr.asm's loop does `call __PRINTCHAR`
 	; then `inc hl` / `dec bc` with no push/pop of its own); clobbers AF,
@@ -1739,7 +1740,7 @@ ITALIC_TMP:
 	; clobbers BC'/DE'/HL'/AF').
 __PRINTCHAR:
 	    PROC
-	    LOCAL __PC_NORMAL, __PC_STATE_DISPATCH, __PC_DONE
+	    LOCAL __PC_NORMAL, __PC_OUT, __PC_STATE_DISPATCH, __PC_DONE
 	    LOCAL __PC_TABLE, __PC_STATE_TABLE
 	    LOCAL __PC_NOP, __PC_COMMA, __PC_DEL, __PC_DEL_COL, __PC_DEL_SAVE, __PC_DEL_RET
 	    LOCAL __PC_NEWLINE_CODE
@@ -1766,9 +1767,28 @@ __PRINTCHAR:
 	    call JUMP_HL_PLUS_2A
 	    jr __PC_DONE
 __PC_NORMAL:            ; printable char (32-255) -> TXT_OUTPUT
+	    cp 144
+	    jr nc, __PC_OUT
+	    cp 128
+	    jr c, __PC_OUT
+	    ; Spectrum block graphics 128-143 are the CPC's 128-143 quadrant
+    ; characters with the quadrants numbered differently (Spectrum bits:
+    ; 0 top right, 1 top left, 2 bottom right, 3 bottom left; CPC: 0 top
+	    ; left, 1 top right, 2 bottom left, 3 bottom right -- checked in the
+	    ; emulator), so swap bits 0<->1 and 2<->3. No glyph table needed.
+	    ld c, a
+	    and $0A
+	    rrca                ; bits 1, 3 -> 0, 2
+	    ld b, a
+	    ld a, c
+	    and $05
+	    rlca                ; bits 0, 2 -> 1, 3
+	    or b
+	    or $80
+__PC_OUT:
 	    call .core.__FW_CALL
 	    defw $BB5A
-#line 164 "src/lib/arch/cpc/runtime/print.asm"
+#line 184 "src/lib/arch/cpc/runtime/print.asm"
 	    jr __PC_DONE
 __PC_STATE_DISPATCH:    ; C held a pending state -> this byte is its parameter
 	    ld hl, __PC_STATE_TABLE
@@ -1820,7 +1840,7 @@ __PRINT_NEWLINE:
 	    ld a, 10
 	    call .core.__FW_CALL
 	    defw $BB5A
-#line 226 "src/lib/arch/cpc/runtime/print.asm"
+#line 246 "src/lib/arch/cpc/runtime/print.asm"
 	    ret
 __PC_ARM_AT:
 	    ld a, 1
@@ -1907,7 +1927,7 @@ __PC_S_AT_COL:          ; state 2: B = COL; D = stashed ROW, E = COL
 	    ld d, a
 	    ld e, b
 	    call __SAVE_S_POSN  ; no bounds check -- matches zx48k's embedded AT
-#line 321 "src/lib/arch/cpc/runtime/print.asm"
+#line 341 "src/lib/arch/cpc/runtime/print.asm"
 	    ret
 __PC_S_INK:
 	    ld a, b
@@ -2051,7 +2071,7 @@ PRINT_AT:
 	    cp e
 	    jr c, __PA_ERR        ; column > last column of the current mode
 	    call __SAVE_S_POSN
-#line 495 "src/lib/arch/cpc/runtime/print.asm"
+#line 515 "src/lib/arch/cpc/runtime/print.asm"
 	    ret
 __PA_ERR:
 	    ld a, ERROR_OutOfScreen

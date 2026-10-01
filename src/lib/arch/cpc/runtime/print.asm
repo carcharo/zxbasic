@@ -40,7 +40,8 @@
 ;   23  TAB -> consumes 2 bytes (only the first is used, matching
 ;       zx48k) and pads with spaces up to that column, modulo the
 ;       screen width (TXT_COLS: 20/40/80 by mode)
-;   32-255  printed via TXT_OUTPUT
+;   32-255  printed via TXT_OUTPUT; 128-143 (Spectrum block graphics)
+;           translated to the CPC's own quadrant characters first
 ;
 ; Phase-3 printer echo (-D __CPC_PRINTER_ECHO__, cpcbuild's cpcrun.py):
 ; every character actually sent to TXT_OUTPUT is mirrored to the
@@ -123,7 +124,7 @@ __PE_DONE:
 __PRINTCHAR:
     PROC
 
-    LOCAL __PC_NORMAL, __PC_STATE_DISPATCH, __PC_DONE
+    LOCAL __PC_NORMAL, __PC_OUT, __PC_STATE_DISPATCH, __PC_DONE
     LOCAL __PC_TABLE, __PC_STATE_TABLE
     LOCAL __PC_NOP, __PC_COMMA, __PC_DEL, __PC_DEL_COL, __PC_DEL_SAVE, __PC_DEL_RET
     LOCAL __PC_NEWLINE_CODE
@@ -156,6 +157,25 @@ __PRINTCHAR:
     jr __PC_DONE
 
 __PC_NORMAL:            ; printable char (32-255) -> TXT_OUTPUT
+    cp 144
+    jr nc, __PC_OUT
+    cp 128
+    jr c, __PC_OUT
+    ; Spectrum block graphics 128-143 are the CPC's 128-143 quadrant
+    ; characters with the quadrants numbered differently (Spectrum bits:
+    ; 0 top right, 1 top left, 2 bottom right, 3 bottom left; CPC: 0 top
+    ; left, 1 top right, 2 bottom left, 3 bottom right -- checked in the
+    ; emulator), so swap bits 0<->1 and 2<->3. No glyph table needed.
+    ld c, a
+    and $0A
+    rrca                ; bits 1, 3 -> 0, 2
+    ld b, a
+    ld a, c
+    and $05
+    rlca                ; bits 0, 2 -> 1, 3
+    or b
+    or $80
+__PC_OUT:
     call .core.__FW_CALL
     defw $BB5A
 #ifdef __CPC_PRINTER_ECHO__

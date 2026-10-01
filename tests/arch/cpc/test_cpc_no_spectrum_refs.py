@@ -149,6 +149,11 @@ CORPUS: dict[str, str] = {
         PRINT INPUT(10)
         END
     """,
+    "screen": """
+        #include <screen.bas>
+        PRINT SCREEN$(0, 0)
+        END
+    """,
     "inkey": """
         PRINT INKEY$
         END
@@ -161,6 +166,14 @@ CORPUS: dict[str, str] = {
     "usr": """
         PRINT USR "a"
         PRINT USR 100
+        END
+    """,
+    "font": """
+        #include <font.bas>
+        DIM f(767) AS UBYTE
+        POKE USR "a", 255
+        SetFont(@f(0))
+        PRINT "Hi"
         END
     """,
     "load_save_code": """
