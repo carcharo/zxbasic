@@ -6,21 +6,25 @@
 
 import src.api.global_
 from src.api.constants import TYPE
-from src.arch.cpc import backend  # noqa
+from src.arch.cpc import backend, beep  # noqa
 from src.arch.z80 import (
     FunctionTranslator,
     Translator,
     VarTranslator,
-    beep,
     optimizer,  # noqa
 )
 
 __all__ = (
+    "GRAPHICS_COORD_TYPE",
     "FunctionTranslator",
     "Translator",
     "VarTranslator",
     "beep",
 )
+
+# PLOT/CIRCLE coordinates are mode pixels (up to 640 wide in mode 2), so they
+# don't fit the Spectrum's byte (see zxbparser.graphics_coord_type).
+GRAPHICS_COORD_TYPE = "integer"
 
 # -----------------------------------------
 # Arch initialization setup (same as zx48k)

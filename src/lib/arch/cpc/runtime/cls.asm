@@ -9,6 +9,7 @@
 ;; paper (not any temporary one left over from the last PRINT), so the
 ;; permanent paper is pushed to the firmware first.
 
+#include once <colour.asm>
 #include once <fwcall.asm>
 #include once <sysvars.asm>
 
@@ -23,11 +24,10 @@ CLS:
     PROC
 
     ld a, (ATTR_P)
-    and 038h              ; paper: bits 3-5 of ATTR_P
     rrca
     rrca
-    rrca                   ; -> bits 0-2, mod 8
-    and 3                  ; mod 4 for the firmware (mode 1, 4 pens)
+    rrca                   ; paper: bits 3-5 of ATTR_P -> bits 0-2
+    call __INK_TO_PEN      ; -> pen of the current mode (colour.asm)
     call .core.__FW_CALL
     defw $BB96              ; TXT_SET_PAPER
 

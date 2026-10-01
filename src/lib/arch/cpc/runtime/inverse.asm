@@ -3,8 +3,8 @@
 ;
 ; Amstrad CPC: INVERSE only touches P_FLAG by name (no ROM/HW), kept
 ; byte-for-byte identical to zx48k's. INVERSE_TMP tail-calls into
-; copy_attr.asm's __SET_ATTR_MODE, which traps (see copy_attr.asm), so is
-; dead code for now.
+; copy_attr.asm's __SET_ATTR_MODE, which applies it to the text pens at
+; once; PLOT/DRAW/CIRCLE read it in gfx.asm (plot in the paper colour).
 
 #include once <copy_attr.asm>
 

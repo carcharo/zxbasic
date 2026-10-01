@@ -27,11 +27,12 @@
 ; CR+LF for a fresh line; the printer gets a bare LF (print.asm's
 ; decision: a clean, diffable text file). And in this mode the whole
 ; point is that a *failing* test still reaches END, so __ERROR must not
-; block on a keypress: it skips KM_FLUSH/KM_WAIT_KEY and goes straight
+; block on a keypress: it skips the key flush/wait and goes straight
 ; to `rst 0` once "Error n" has been echoed.
 
 #include once <fwcall.asm>
 #include once <sysvars.asm>
+#include once <bootstrap.asm>
 
     push namespace core
 
@@ -87,9 +88,10 @@ __EPE_DONE:
 ; This never returns to the caller.
 ;
 ; Firmware entries called (all through the gate): TXT_OUTPUT (&BB5A),
-; KM_FLUSH (&BD3D, 664/6128 only -- our target model, cpcbuild/docs/
-; notes.md), KM_WAIT_KEY (&BB18). KM_FLUSH discards whatever is in the
-; key buffer first -- most obviously the RETURN that submitted
+; KM_READ_CHAR (&BB09) until the key buffer is empty, then KM_WAIT_KEY
+; (&BB18), both via bootstrap.asm's __CPC_WAIT_KEY. (Not KM_FLUSH: that
+; is 664/6128 only, and the 464 is supported.) The flush discards
+; whatever is in the key buffer first -- most obviously the RETURN that submitted
 ; RUN"<prog>" itself, which would otherwise satisfy KM_WAIT_KEY without
 ; a real keypress -- so the wait below is for a new key, not a stale
 ; one. Verified end to end in the emulator (cpc-port-notes.md Phase 2
@@ -143,12 +145,8 @@ __ERROR_MSG_DONE:
     ; on a keypress here (see the file header) -- straight to reset.
     rst  0
 #else
-    ; Flush the stale RUN" keypress, then wait for a real one -- see
-    ; the firmware-entries note above.
-    call .core.__FW_CALL
-    defw $BD3D
-    call .core.__FW_CALL
-    defw $BB18
+    ; Flush stale keys, then wait for a real one (bootstrap.asm).
+    call __CPC_WAIT_KEY
 
     rst  0              ; reset to BASIC's Ready prompt
 #endif

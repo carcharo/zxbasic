@@ -2,9 +2,9 @@
 ; Parameter: OVER flag in bit 0 of A register
 ;
 ; Amstrad CPC: same as inverse.asm -- OVER only touches FLAGS2/P_FLAG by
-; name (no ROM/HW), kept byte-for-byte identical. OVER_TMP is dead code
-; until print.asm is real (its tail call into copy_attr.asm's
-; __SET_ATTR_MODE traps).
+; name (no ROM/HW), kept byte-for-byte identical. OVER 1 is XOR for
+; PLOT/DRAW/CIRCLE (gfx.asm, the firmware's graphics write mode) and is
+; ignored for text: the firmware has no XOR text mode (notes.md Q5).
 
 #include once <copy_attr.asm>
 #include once <sysvars.asm>

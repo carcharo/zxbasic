@@ -55,8 +55,10 @@ __LOAD_S_POSN:
     dec a
     ld d, a           ; D = row, 0-based
 
-    ld a, h           ; H = logical column, 1-based (up to 41)
-    cp SCR_COLS_VISIBLE + 1
+    ld a, (TXT_COLS)  ; H = logical column, 1-based: up to TXT_COLS + 1
+    inc a             ; when a wrap is pending
+    cp h
+    ld a, h
     jr z, __LSP_WRAP
     dec a
     ld e, a

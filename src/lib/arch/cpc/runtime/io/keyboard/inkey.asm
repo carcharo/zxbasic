@@ -1,15 +1,25 @@
-; INKEY$ Function -- Phase-1 stub for zx48k/runtime/io/keyboard/inkey.asm
-; (was: Spectrum ROM KEY_SCAN/KEY_TEST/KEY_CODE, &028E/&031E/&0333, ROM
-; code that doesn't exist at those addresses on the CPC).
+; -----------------------------------------------------------------------
+; Amstrad CPC -- INKEY$
 ;
-; Rather than a hard trap, this returns the same result the real zx48k
-; routine gives when no key is pressed (an allocated, empty ZX BASIC
-; string) -- always. That still needs dynamic memory (mem/alloc.asm,
-; inherited unchanged), but no ROM, sysvar or hardware access at all, so
-; it is a legitimate, if limited, real implementation: INKEY$ always
-; reports "no key pressed".
-; TODO(cpc): Phase 4a -> wire up to the firmware's KM_TEST_KEY (&BB1E).
+; Returns the next character from the firmware's key buffer
+; (KM_READ_CHAR), or "" if there is none. zx48k scans the Spectrum
+; keyboard through ROM routines instead (&028E/&031E/&0333).
+;
+; Differences from the Spectrum, where INKEY$ is the key held down right
+; now: this is the CPC's own buffered model (like Locomotive BASIC's
+; INKEY$). A key pressed once is returned once, and a key held down
+; repeats at the firmware's auto-repeat rate. Codes are the CPC's own:
+; RETURN 13, DEL 127, cursor keys 240-243 (up, down, left, right).
+; Games that need several keys at once should test them directly
+; (KM_TEST_KEY; a keyboard library comes in Phase 4c).
+;
+; Returns HL = a new ZX BASIC string (or 0 if out of memory).
+; Firmware entry called (via the gate): KM_READ_CHAR (&BB09, -> Carry =
+; got one, A = character).
+; Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF' (the
+; gate).
 
+#include once <fwcall.asm>
 #include once <mem/alloc.asm>
 
     push namespace core
@@ -17,18 +27,27 @@
 INKEY:
     PROC
 
-    ld bc, 3	; 1 char length string
+    call .core.__FW_CALL
+    defw $BB09              ; KM_READ_CHAR
+    ld   e, a               ; E = character
+    sbc  a, a
+    and  1
+    ld   d, a               ; D = length: 1 if a key, else 0
+    push de
+    ld   bc, 3              ; 2-byte length + 1 character
     call __MEM_ALLOC
+    pop  de
+    ld   a, h
+    or   l
+    ret  z                  ; out of memory
 
-    ld a, h
-    or l
-    ret z	; Return if NULL (No memory)
-
-    xor a
-    ld (hl), a
-    inc hl
-    ld (hl), a
-    dec hl
+    ld   (hl), d
+    inc  hl
+    ld   (hl), 0
+    inc  hl
+    ld   (hl), e
+    dec  hl
+    dec  hl
     ret
 
     ENDP

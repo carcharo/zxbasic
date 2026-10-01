@@ -107,23 +107,37 @@
 ;   $46     60    FP_CALC_STACK      fp_calc.asm: the FP number stack
 ;                                    itself (12 numbers max)
 ;   $82     30    FP_MEM_AREA        fp_calc.asm: the MEM area (6 cells)
+;   $A0     8     PEN_MAP            colour.asm: Spectrum colour 0-7 ->
+;                                    pen of the current screen mode
+;   $A8     1     GFX_XSHIFT         colour.asm: mode pixel x -> firmware
+;                                    virtual x shift (mode 0: 2, 1: 1,
+;                                    2: 0)
+;   $A9     1     TXT_COLS           colour.asm: text columns of the
+;                                    current mode (20/40/80)
+;   $AA     1     GRA_PEN_CUR        gfx.asm: graphics pen last given to
+;                                    the firmware ($FF = unknown)
+;   $AB     1     GRA_MODE_CUR       gfx.asm: graphics write mode last
+;                                    given to the firmware ($FF = unknown)
+;   $AC     9     SOUND_BLK          beep.asm: SOUND_QUEUE block (the
+;                                    firmware reads it, so it must be in
+;                                    the central 32K -- it is)
+;   $B5     10    CIRC_VARS          circle.asm: centre X/Y, x, y, d
+;   $BF     1     PAUSE_TICK         pause.asm: last 300 Hz tick count
 ;   ------  ----
-;   $A0     (160 bytes used)
+;   $C0     (192 bytes used)
 ;
 ; --- ATTR_P / ATTR_T bit layout (one byte, same shape as zx48k's) ------
 ;
 ;   bit   Meaning
 ;   ---   ------------------------------------------------------------
-;   0-2   ink pen, stored mod 8 by ink.asm (unchanged from zx48k); only
-;         applied to the firmware mod 4 (mode 1 has 4 pens) -- see
-;         copy_attr.asm's __SET_ATTR_MODE
-;   3-5   paper pen, stored mod 8 by paper.asm, applied mod 4 likewise
-;   6     BRIGHT flag (bright.asm) -- accepted, ignored for now
-;         TODO(cpc): Phase 4a
-;   7     FLASH flag (flash.asm) -- accepted, ignored for now
-;         TODO(cpc): Phase 4a
+;   0-2   ink: a Spectrum colour 0-7 (ink.asm, unchanged from zx48k),
+;         turned into a pen of the current mode through PEN_MAP
+;         (colour.asm) whenever it reaches the firmware
+;   3-5   paper: a Spectrum colour 0-7, mapped the same way
+;   6     BRIGHT flag (bright.asm) -- accepted, ignored (notes.md Q5)
+;   7     FLASH flag (flash.asm) -- accepted, ignored (notes.md Q5)
 ;
-; $A0 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
+; $C0 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
 ; below lets it be compared against .core.CPC_PRIV_SIZE by eye whenever
 ; this table grows.
 
@@ -177,10 +191,22 @@ FP_CALC_STACK       EQU SYSVAR_BASE + $46   ; 60B -- the FP number stack (12 num
 FP_CALC_STACK_END   EQU FP_CALC_STACK + 60
 FP_MEM_AREA         EQU SYSVAR_BASE + $82   ; 30B -- the MEM area (6 cells x 5B)
 
-CPC_SYSVARS_USED    EQU $A0                 ; bytes used above; compare by eye against
+PEN_MAP             EQU SYSVAR_BASE + $A0   ; 8B -- Spectrum colour -> pen (colour.asm)
+GFX_XSHIFT          EQU SYSVAR_BASE + $A8   ; DB -- mode pixel x -> virtual x shift
+TXT_COLS            EQU SYSVAR_BASE + $A9   ; DB -- text columns in the current mode
+GRA_PEN_CUR         EQU SYSVAR_BASE + $AA   ; DB -- cached graphics pen ($FF = unknown)
+GRA_MODE_CUR        EQU SYSVAR_BASE + $AB   ; DB -- cached graphics write mode ($FF = unknown)
+SOUND_BLK           EQU SYSVAR_BASE + $AC   ; 9B -- SOUND_QUEUE block (beep.asm)
+CIRC_VARS           EQU SYSVAR_BASE + $B5   ; 10B -- CIRCLE state (circle.asm)
+PAUSE_TICK          EQU SYSVAR_BASE + $BF   ; DB -- PAUSE's last tick count (pause.asm)
+
+CPC_SYSVARS_USED    EQU $C0                 ; bytes used above; compare by eye against
                                              ; .core.CPC_PRIV_SIZE when this table grows
 
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
+; The column count follows the screen mode at run time (TXT_COLS above:
+; 20/40/80); these constants are the boot-time mode 1 values. Only the
+; row count is the same in every mode.
 ; SCR_COLS keeps zx48k's own "columns + 1" convention (see zx48k's
 ; sysvars.asm: SCR_COLS EQU 33 for 32 visible columns). SCR_COLS_VISIBLE
 ; is the plain visible-column count, used by print.asm/sposn.asm's

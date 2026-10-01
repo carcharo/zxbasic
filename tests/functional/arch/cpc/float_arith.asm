@@ -199,23 +199,37 @@ _y:
 ;   $46     60    FP_CALC_STACK      fp_calc.asm: the FP number stack
 	;                                    itself (12 numbers max)
 ;   $82     30    FP_MEM_AREA        fp_calc.asm: the MEM area (6 cells)
+;   $A0     8     PEN_MAP            colour.asm: Spectrum colour 0-7 ->
+	;                                    pen of the current screen mode
+;   $A8     1     GFX_XSHIFT         colour.asm: mode pixel x -> firmware
+;                                    virtual x shift (mode 0: 2, 1: 1,
+;                                    2: 0)
+;   $A9     1     TXT_COLS           colour.asm: text columns of the
+	;                                    current mode (20/40/80)
+;   $AA     1     GRA_PEN_CUR        gfx.asm: graphics pen last given to
+	;                                    the firmware ($FF = unknown)
+;   $AB     1     GRA_MODE_CUR       gfx.asm: graphics write mode last
+	;                                    given to the firmware ($FF = unknown)
+;   $AC     9     SOUND_BLK          beep.asm: SOUND_QUEUE block (the
+	;                                    firmware reads it, so it must be in
+	;                                    the central 32K -- it is)
+;   $B5     10    CIRC_VARS          circle.asm: centre X/Y, x, y, d
+;   $BF     1     PAUSE_TICK         pause.asm: last 300 Hz tick count
 	;   ------  ----
-	;   $A0     (160 bytes used)
+	;   $C0     (192 bytes used)
 	;
 	; --- ATTR_P / ATTR_T bit layout (one byte, same shape as zx48k's) ------
 	;
 	;   bit   Meaning
 	;   ---   ------------------------------------------------------------
-	;   0-2   ink pen, stored mod 8 by ink.asm (unchanged from zx48k); only
-	;         applied to the firmware mod 4 (mode 1 has 4 pens) -- see
-	;         copy_attr.asm's __SET_ATTR_MODE
-	;   3-5   paper pen, stored mod 8 by paper.asm, applied mod 4 likewise
-	;   6     BRIGHT flag (bright.asm) -- accepted, ignored for now
-;         TODO(cpc): Phase 4a
-	;   7     FLASH flag (flash.asm) -- accepted, ignored for now
-;         TODO(cpc): Phase 4a
+;   0-2   ink: a Spectrum colour 0-7 (ink.asm, unchanged from zx48k),
+	;         turned into a pen of the current mode through PEN_MAP
+	;         (colour.asm) whenever it reaches the firmware
+;   3-5   paper: a Spectrum colour 0-7, mapped the same way
+	;   6     BRIGHT flag (bright.asm) -- accepted, ignored (notes.md Q5)
+	;   7     FLASH flag (flash.asm) -- accepted, ignored (notes.md Q5)
 	;
-	; $A0 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
+	; $C0 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
 	; below lets it be compared against .core.CPC_PRIV_SIZE by eye whenever
 	; this table grows.
 	    push namespace core
@@ -258,9 +272,20 @@ _y:
 	FP_CALC_STACK       EQU SYSVAR_BASE + $46   ; 60B -- the FP number stack (12 numbers max)
 	FP_CALC_STACK_END   EQU FP_CALC_STACK + 60
 	FP_MEM_AREA         EQU SYSVAR_BASE + $82   ; 30B -- the MEM area (6 cells x 5B)
-	CPC_SYSVARS_USED    EQU $A0                 ; bytes used above; compare by eye against
+	PEN_MAP             EQU SYSVAR_BASE + $A0   ; 8B -- Spectrum colour -> pen (colour.asm)
+	GFX_XSHIFT          EQU SYSVAR_BASE + $A8   ; DB -- mode pixel x -> virtual x shift
+	TXT_COLS            EQU SYSVAR_BASE + $A9   ; DB -- text columns in the current mode
+	GRA_PEN_CUR         EQU SYSVAR_BASE + $AA   ; DB -- cached graphics pen ($FF = unknown)
+	GRA_MODE_CUR        EQU SYSVAR_BASE + $AB   ; DB -- cached graphics write mode ($FF = unknown)
+	SOUND_BLK           EQU SYSVAR_BASE + $AC   ; 9B -- SOUND_QUEUE block (beep.asm)
+	CIRC_VARS           EQU SYSVAR_BASE + $B5   ; 10B -- CIRCLE state (circle.asm)
+	PAUSE_TICK          EQU SYSVAR_BASE + $BF   ; DB -- PAUSE's last tick count (pause.asm)
+	CPC_SYSVARS_USED    EQU $C0                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
+; The column count follows the screen mode at run time (TXT_COLS above:
+	; 20/40/80); these constants are the boot-time mode 1 values. Only the
+	; row count is the same in every mode.
 	; SCR_COLS keeps zx48k's own "columns + 1" convention (see zx48k's
 ; sysvars.asm: SCR_COLS EQU 33 for 32 visible columns). SCR_COLS_VISIBLE
 	; is the plain visible-column count, used by print.asm/sposn.asm's
@@ -302,7 +327,7 @@ _y:
 	; CR+LF for a fresh line; the printer gets a bare LF (print.asm's
 ; decision: a clean, diffable text file). And in this mode the whole
 	; point is that a *failing* test still reaches END, so __ERROR must not
-; block on a keypress: it skips KM_FLUSH/KM_WAIT_KEY and goes straight
+; block on a keypress: it skips the key flush/wait and goes straight
 	; to `rst 0` once "Error n" has been echoed.
 #line 1 "src/lib/arch/cpc/runtime/fwcall.asm"
 	; -----------------------------------------------------------------------
@@ -387,6 +412,244 @@ __FW_CALL_IX_TARGET:
 	    ENDP
 	    pop namespace
 #line 34 "src/lib/arch/cpc/runtime/error.asm"
+#line 1 "src/lib/arch/cpc/runtime/bootstrap.asm"
+	; -----------------------------------------------------------------------
+	; Amstrad CPC bootstrap -- captures FW_BC, initialises the private
+	; runtime block's sysvars, and sets the initial screen mode
+	;
+	; Registered with #init, so the compiler inserts
+	; "call .core.CPC_INIT_00_BOOTSTRAP" in the prologue (src/arch/cpc/
+	; backend/main.py's emit_prologue()).
+	;
+	; Forced into every program via common.REQUIRES (backend/main.py's
+; Backend.init()) rather than pulled in transitively: this must run
+	; even in programs with no PRINT/arrays/etc. that would otherwise never
+	; #include sysvars.asm.
+	;
+; Naming: #init calls are emitted in sorted label order (sorted() over
+	; the raw strings passed to every #init directive -- see
+	; src/arch/z80/backend/main.py's emit_prologue and
+	; src/zxbc/zxbparser.py's preproc_line_init). FW_BC must be captured from
+	; the live BC' before anything else can disturb it (see fwcall.asm's
+	; header), which means this routine must be the first #init call, full
+	; stop -- not just first among the cpc runtime's own files, but first
+	; against anything any future #include might add. ".core.CPC_INIT_FP_CALC"
+	; (fp_calc.asm) would otherwise sort before ".core.CPC_INIT_SYSVARS" (F <
+; S), so the routine is named CPC_INIT_00_BOOTSTRAP: the "00_" digit
+	; prefix sorts before any plausible future "CPC_INIT_<LETTER>..." name
+	; (digits are below uppercase letters in ASCII), which is a stronger
+	; guarantee than just renaming past today's one clash. Nothing else
+	; references the old CPC_INIT_SYSVARS name.
+#line 1 "src/lib/arch/cpc/runtime/colour.asm"
+	; -----------------------------------------------------------------------
+	; Amstrad CPC -- Spectrum colours to pens, and the per-mode screen
+	; variables (cpcbuild/docs/notes.md, 2026-10-01, question 4)
+	;
+	; INK/PAPER/BORDER take Spectrum colours 0-7 (black, blue, red,
+	; magenta, green, cyan, yellow, white). A CPC mode has 2, 4 or 16 pens
+	; instead, so each colour goes through PEN_MAP, a fixed per-mode table
+; picking the pen whose *firmware default* colour is nearest:
+	;
+	;   Spectrum   0  1  2  3  4  5  6  7
+;   mode 0     5  6  3  7 12  2  1  4   exact: black, bright blue, bright
+	;                                       red, bright magenta, bright green,
+	;                                       bright cyan, bright yellow,
+	;                                       bright white
+	;   mode 1     0  0  3  3  2  2  1  1   blue, yellow, cyan, red palette
+	;   mode 2     0  0  0  0  1  1  1  1   blue, yellow palette (by brightness)
+	;
+	; So the default "white on black" is the CPC's own yellow on blue in
+	; mode 1. SetInk (cpc.bas) changes a pen's colour, not this table.
+	;
+	; The same mode switch also sets GFX_XSHIFT (mode pixels to firmware
+	; virtual coordinates, gfx.asm) and TXT_COLS (print.asm/sposn.asm), and
+	; forgets the graphics pen/write-mode cache (gfx.asm), since the
+	; firmware's mode change resets its graphics state.
+	    push namespace core
+	; __CPC_SET_MODE_VARS -- A = screen mode (0-3; 3 is the undocumented
+	; 4-pen 160x200 hardware mode, treated as mode 0 geometry with mode 1
+	; pens). Loads PEN_MAP, GFX_XSHIFT and TXT_COLS for that mode and marks
+	; the graphics pen/mode cache unknown. Called by the bootstrap (mode 1)
+	; and by cpc.bas's Mode after SCR_SET_MODE.
+; Firmware entry called: none (memory only).
+; Registers clobbered: AF, BC, DE, HL.
+__CPC_SET_MODE_VARS:
+	    PROC
+	    LOCAL __SMV_MAPS, __SMV_PARAMS
+	    and  3
+	    ld   l, a
+	    ld   h, 0
+	    add  hl, hl
+	    add  hl, hl
+	    add  hl, hl             ; HL = mode * 8
+	    ld   de, __SMV_MAPS
+	    add  hl, de
+	    ld   de, PEN_MAP
+	    ld   bc, 8
+	    ldir                    ; A (the mode) survives
+	    add  a, a
+	    ld   e, a
+	    ld   d, 0
+	    ld   hl, __SMV_PARAMS
+	    add  hl, de
+	    ld   a, (hl)
+	    ld   (GFX_XSHIFT), a
+	    inc  hl
+	    ld   a, (hl)
+	    ld   (TXT_COLS), a
+	    ld   a, $FF
+	    ld   (GRA_PEN_CUR), a
+	    ld   (GRA_MODE_CUR), a
+	    ret
+__SMV_MAPS:
+	    DEFB 5, 6, 3, 7, 12, 2, 1, 4    ; mode 0
+	    DEFB 0, 0, 3, 3, 2, 2, 1, 1     ; mode 1
+	    DEFB 0, 0, 0, 0, 1, 1, 1, 1     ; mode 2
+	    DEFB 0, 0, 3, 3, 2, 2, 1, 1     ; mode 3
+__SMV_PARAMS:                       ; GFX_XSHIFT, TXT_COLS
+    DEFB 2, 20                      ; mode 0: 160 pixels, 20 columns
+    DEFB 1, 40                      ; mode 1: 320 pixels, 40 columns
+    DEFB 0, 80                      ; mode 2: 640 pixels, 80 columns
+	    DEFB 2, 20                      ; mode 3
+	    ENDP
+	; __INK_TO_PEN -- A = Spectrum colour (bits 0-2 used) -> A = pen of the
+	; current mode.
+; Firmware entry called: none.
+; Registers clobbered: AF.
+__INK_TO_PEN:
+	    push hl
+	    and  7
+	    ld   hl, PEN_MAP
+	    add  a, l
+	    ld   l, a
+	    adc  a, h
+	    sub  l
+	    ld   h, a
+	    ld   a, (hl)
+	    pop  hl
+	    ret
+	    pop namespace
+#line 32 "src/lib/arch/cpc/runtime/bootstrap.asm"
+	    push namespace core
+	; CPC_INIT_00_BOOTSTRAP -- captures FW_BC, zero-fills the private
+	; runtime block ($9E00-$A1FF, .core.CPC_PRIV_BASE for
+	; .core.CPC_PRIV_SIZE bytes), sets the few sysvars that need a
+	; non-zero default, then sets screen MODE 1 through the firmware gate.
+	;
+	; FW_BC is captured first, before the zero-fill, but can't be written
+	; to its sysvar slot yet -- that slot is about to be zeroed along with
+; the rest of the block. So it's parked on the stack (already valid:
+	; the prologue sets SP before calling #init routines) and only written
+	; out to FW_BC once the zero-fill is done.
+	;
+; Firmware entry called: SCR_SET_MODE (&BC0E, via the gate, once
+	; FW_BC/IN_FW exist) -- see fwcall.asm for what that call clobbers.
+; Registers clobbered: AF, BC, DE, HL (and, transiently, BC'/DE'/HL').
+CPC_INIT_00_BOOTSTRAP:
+	    PROC
+	    ; Capture the firmware's BC' immediately -- see the header above
+	    ; and fwcall.asm's contract. Parked on the stack, not yet in FW_BC.
+	    exx
+	    push bc
+	    exx
+	    ; Zero-fill the whole private block; sysvars set below simply
+	    ; overwrite their own zeroed slot. This also zeroes FW_BC's and
+	    ; IN_FW's slots -- the captured value is still safe on the stack.
+	    ld   hl, .core.CPC_PRIV_BASE
+	    ld   (hl), 0
+	    ld   de, .core.CPC_PRIV_BASE + 1
+	    ld   bc, .core.CPC_PRIV_SIZE - 1
+	    ldir
+	    ; Now write the captured FW_BC out to its (freshly-zeroed) slot.
+	    ; IN_FW stays 0, which the zero-fill already set.
+	    pop  bc
+	    ld   (FW_BC), bc
+    ; ERR_NR: -1 means "no error", not 0 (matches the ZX Spectrum manual's
+	    ; convention).
+	    ld   a, $FF
+	    ld   (ERR_NR), a
+    ; Initial permanent attribute: INK 7 / PAPER 0 (white on black), which
+	    ; colour.asm maps to the firmware's own default pens, pen 1 on pen 0
+	    ; in mode 1 (yellow on blue). Set here, not by print.asm, because
+	    ; PLOT/DRAW/CIRCLE use it too in programs that never PRINT; left at 0
+	    ; it would be black on black, i.e. invisible.
+	    ld   a, 7
+	    ld   (ATTR_P), a
+    ; SCREEN_ADDR: mode 1 screen base. SCREEN_ATTR_ADDR is left zeroed --
+	    ; see the placeholder note in sysvars.asm.
+	    ld   hl, $C000
+	    ld   (SCREEN_ADDR), hl
+	    ; Cursor at the top-left of the text window.
+	    ld   hl, 0
+	    ld   (S_POSN), hl
+	    ; Screen mode 1 (40x25, 4 colours). SCR_SET_MODE also resets the
+	    ; text/graphics windows to full-screen, the graphics origin, and
+	    ; the current stream -- and, confirmed in the emulator (see
+	    ; cpc-port-notes.md Phase 2 results), clears the screen and homes
+	    ; the firmware's own text cursor, even though the Firmware Guide's
+	    ; own entry for &BC0E doesn't spell that out explicitly.
+	    ld   a, 1
+	    call .core.__FW_CALL
+	    defw $BC0E
+	    ld   a, 1
+    call __CPC_SET_MODE_VARS    ; colour.asm: pen map, widths for mode 1
+    ; Empty the key buffer: the RETURN that submitted RUN"<prog> can
+	    ; still be in it, and the first INKEY$ or PAUSE would see it.
+	    jp   __CPC_FLUSH_KEYS
+	    ENDP
+	; __CPC_FLUSH_KEYS -- discards every character waiting in the firmware's
+	; key buffer. KM_FLUSH (&BD3D) does this on the 664/6128 only, so this
+	; reads characters with KM_READ_CHAR (&BB09, every model) until it
+	; reports none (Carry clear).
+; Registers clobbered: AF (main); BC', DE', HL', AF' (the gate).
+__CPC_FLUSH_KEYS:
+	    call .core.__FW_CALL
+	    defw $BB09
+	    jr   c, __CPC_FLUSH_KEYS
+	    ret
+	; __CPC_WAIT_KEY -- flushes stale keys, then waits for a new keypress
+	; (KM_WAIT_KEY, &BB18). END and runtime errors use it so the program's
+	; last screen stays visible until a key is pressed (notes.md question 1).
+; Registers clobbered: AF (main); BC', DE', HL', AF' (the gate).
+__CPC_WAIT_KEY:
+	    call __CPC_FLUSH_KEYS
+	    call .core.__FW_CALL
+	    defw $BB18
+	    ret
+	; __CPC_END -- the single choke point for a *clean* END (src/arch/cpc/
+	; backend/generic.py's _end emits "jp .core.__CPC_END" for every END in
+	; the program, instead of a bare RST 0). Reaching address 0 by itself
+; doesn't prove the program reached END: a crash that happens to reset
+	; the machine, or a runtime error (error.asm's __ERROR, also RST 0 after
+	; printing "Error n"), lands there too. This is forced into every build
+	; (bootstrap.asm is in common.REQUIRES unconditionally -- see the file
+	; header), so it's the one place a distinguishing marker can live for
+	; every program, not just ones that happen to #include some other file.
+	;
+	; Under -D __CPC_PRINTER_ECHO__ (cpcbuild's cpcrun.py test harness),
+	; sends __CPC_END_MARKER -- a line containing only "\x04END" -- to the
+	; printer via MC_PRINT_CHAR (&BD2B), through the gate, before the RST 0.
+	; \x04 (ASCII EOT) as the first byte makes the line unlike anything a
+	; Boriel program can PRINT (print.asm's control-code table drops or
+	; diverts every code below 32 except 6/8/13-23) and unlike the
+	; "NOT IMPLEMENTED" (stub.asm) / "Error n" (error.asm) text the same
+	; transcript can otherwise contain, so cpcrun.py can grep for it
+	; unambiguously and strip it from the reported transcript.
+	;
+	; Without the flag it waits for a key first (__CPC_WAIT_KEY), so the
+	; program's output stays on screen (notes.md question 1), then resets.
+	;
+; Firmware entries called: MC_PRINT_CHAR (&BD2B) in printer-echo builds;
+; KM_READ_CHAR/KM_WAIT_KEY otherwise. Registers clobbered: none (never
+	; returns).
+#line 164 "src/lib/arch/cpc/runtime/bootstrap.asm"
+__CPC_END:
+#line 190 "src/lib/arch/cpc/runtime/bootstrap.asm"
+	    call __CPC_WAIT_KEY
+	    rst  0
+#line 193 "src/lib/arch/cpc/runtime/bootstrap.asm"
+	    pop namespace
+#line 36 "src/lib/arch/cpc/runtime/error.asm"
 	    push namespace core
 	; Error code definitions (as in ZX spectrum manual)
 ; Set error code with:
@@ -405,7 +668,7 @@ __FW_CALL_IX_TARGET:
 	ERROR_BreakIntoProgram  EQU    20
 	ERROR_TapeLoadingErr    EQU    26
 __ERR_STR: DEFB "Error ", 0
-#line 82 "src/lib/arch/cpc/runtime/error.asm"
+#line 83 "src/lib/arch/cpc/runtime/error.asm"
 ; Raises a runtime error: stores the code, prints "Error n" on a fresh
 	; line, waits for a keypress, then resets to BASIC's Ready prompt (END's
 	; own reset, generic.py's _end -- see cpc-port-notes.md Sec6.5).
@@ -413,9 +676,10 @@ __ERR_STR: DEFB "Error ", 0
 	; This never returns to the caller.
 	;
 ; Firmware entries called (all through the gate): TXT_OUTPUT (&BB5A),
-	; KM_FLUSH (&BD3D, 664/6128 only -- our target model, cpcbuild/docs/
-	; notes.md), KM_WAIT_KEY (&BB18). KM_FLUSH discards whatever is in the
-	; key buffer first -- most obviously the RETURN that submitted
+	; KM_READ_CHAR (&BB09) until the key buffer is empty, then KM_WAIT_KEY
+; (&BB18), both via bootstrap.asm's __CPC_WAIT_KEY. (Not KM_FLUSH: that
+	; is 664/6128 only, and the 464 is supported.) The flush discards
+	; whatever is in the key buffer first -- most obviously the RETURN that submitted
 	; RUN"<prog>" itself, which would otherwise satisfy KM_WAIT_KEY without
 	; a real keypress -- so the wait below is for a new key, not a stale
 	; one. Verified end to end in the emulator (cpc-port-notes.md Phase 2
@@ -440,7 +704,7 @@ __ERROR:
 	    ld   a, 10
 	    call .core.__FW_CALL
 	    defw $BB5A
-#line 122 "src/lib/arch/cpc/runtime/error.asm"
+#line 124 "src/lib/arch/cpc/runtime/error.asm"
 	    ; "Error "
 	    ld   hl, __ERR_STR
 __ERROR_MSG_LOOP:
@@ -450,20 +714,16 @@ __ERROR_MSG_LOOP:
 	    inc  hl
 	    call .core.__FW_CALL
 	    defw $BB5A
-#line 135 "src/lib/arch/cpc/runtime/error.asm"
+#line 137 "src/lib/arch/cpc/runtime/error.asm"
 	    jr   __ERROR_MSG_LOOP
 __ERROR_MSG_DONE:
 	    ld   a, c
 	    call __PRINT_DECIMAL_A
-#line 146 "src/lib/arch/cpc/runtime/error.asm"
-	    ; Flush the stale RUN" keypress, then wait for a real one -- see
-	    ; the firmware-entries note above.
-	    call .core.__FW_CALL
-	    defw $BD3D
-	    call .core.__FW_CALL
-	    defw $BB18
+#line 148 "src/lib/arch/cpc/runtime/error.asm"
+	    ; Flush stale keys, then wait for a real one (bootstrap.asm).
+	    call __CPC_WAIT_KEY
 	    rst  0              ; reset to BASIC's Ready prompt
-#line 155 "src/lib/arch/cpc/runtime/error.asm"
+#line 153 "src/lib/arch/cpc/runtime/error.asm"
 	    ENDP
 	; Sets the error system variable, but keeps running.
 	; Usually this instruction if followed by the END intermediate instruction.
@@ -511,7 +771,7 @@ __PDA_DONE:
 	    add  a, '0'
 	    call .core.__FW_CALL
 	    defw $BB5A
-#line 213 "src/lib/arch/cpc/runtime/error.asm"
+#line 211 "src/lib/arch/cpc/runtime/error.asm"
 __PDA_SKIP:
 	    ld   a, e             ; remainder becomes the input for the next digit
 	    ret
@@ -2546,122 +2806,6 @@ __MULF:	; Multiplication
 	    jp __FPSTACK_POP
 	    pop namespace
 #line 42 "tests/functional/arch/cpc/float_arith.bas"
-#line 1 "src/lib/arch/cpc/runtime/bootstrap.asm"
-	; -----------------------------------------------------------------------
-	; Amstrad CPC bootstrap -- captures FW_BC, initialises the private
-	; runtime block's sysvars, and sets the initial screen mode
-	;
-	; Registered with #init, so the compiler inserts
-	; "call .core.CPC_INIT_00_BOOTSTRAP" in the prologue (src/arch/cpc/
-	; backend/main.py's emit_prologue()).
-	;
-	; Forced into every program via common.REQUIRES (backend/main.py's
-; Backend.init()) rather than pulled in transitively: this must run
-	; even in programs with no PRINT/arrays/etc. that would otherwise never
-	; #include sysvars.asm.
-	;
-; Naming: #init calls are emitted in sorted label order (sorted() over
-	; the raw strings passed to every #init directive -- see
-	; src/arch/z80/backend/main.py's emit_prologue and
-	; src/zxbc/zxbparser.py's preproc_line_init). FW_BC must be captured from
-	; the live BC' before anything else can disturb it (see fwcall.asm's
-	; header), which means this routine must be the first #init call, full
-	; stop -- not just first among the cpc runtime's own files, but first
-	; against anything any future #include might add. ".core.CPC_INIT_FP_CALC"
-	; (fp_calc.asm) would otherwise sort before ".core.CPC_INIT_SYSVARS" (F <
-; S), so the routine is named CPC_INIT_00_BOOTSTRAP: the "00_" digit
-	; prefix sorts before any plausible future "CPC_INIT_<LETTER>..." name
-	; (digits are below uppercase letters in ASCII), which is a stronger
-	; guarantee than just renaming past today's one clash. Nothing else
-	; references the old CPC_INIT_SYSVARS name.
-	    push namespace core
-	; CPC_INIT_00_BOOTSTRAP -- captures FW_BC, zero-fills the private
-	; runtime block ($9E00-$A1FF, .core.CPC_PRIV_BASE for
-	; .core.CPC_PRIV_SIZE bytes), sets the few sysvars that need a
-	; non-zero default, then sets screen MODE 1 through the firmware gate.
-	;
-	; FW_BC is captured first, before the zero-fill, but can't be written
-	; to its sysvar slot yet -- that slot is about to be zeroed along with
-; the rest of the block. So it's parked on the stack (already valid:
-	; the prologue sets SP before calling #init routines) and only written
-	; out to FW_BC once the zero-fill is done.
-	;
-; Firmware entry called: SCR_SET_MODE (&BC0E, via the gate, once
-	; FW_BC/IN_FW exist) -- see fwcall.asm for what that call clobbers.
-; Registers clobbered: AF, BC, DE, HL (and, transiently, BC'/DE'/HL').
-CPC_INIT_00_BOOTSTRAP:
-	    PROC
-	    ; Capture the firmware's BC' immediately -- see the header above
-	    ; and fwcall.asm's contract. Parked on the stack, not yet in FW_BC.
-	    exx
-	    push bc
-	    exx
-	    ; Zero-fill the whole private block; sysvars set below simply
-	    ; overwrite their own zeroed slot. This also zeroes FW_BC's and
-	    ; IN_FW's slots -- the captured value is still safe on the stack.
-	    ld   hl, .core.CPC_PRIV_BASE
-	    ld   (hl), 0
-	    ld   de, .core.CPC_PRIV_BASE + 1
-	    ld   bc, .core.CPC_PRIV_SIZE - 1
-	    ldir
-	    ; Now write the captured FW_BC out to its (freshly-zeroed) slot.
-	    ; IN_FW stays 0, which the zero-fill already set.
-	    pop  bc
-	    ld   (FW_BC), bc
-    ; ERR_NR: -1 means "no error", not 0 (matches the ZX Spectrum manual's
-	    ; convention).
-	    ld   a, $FF
-	    ld   (ERR_NR), a
-    ; SCREEN_ADDR: mode 1 screen base. SCREEN_ATTR_ADDR is left zeroed --
-	    ; see the placeholder note in sysvars.asm.
-	    ld   hl, $C000
-	    ld   (SCREEN_ADDR), hl
-	    ; Cursor at the top-left of the text window.
-	    ld   hl, 0
-	    ld   (S_POSN), hl
-	    ; Screen mode 1 (40x25, 4 colours). SCR_SET_MODE also resets the
-	    ; text/graphics windows to full-screen, the graphics origin, and
-	    ; the current stream -- and, confirmed in the emulator (see
-	    ; cpc-port-notes.md Phase 2 results), clears the screen and homes
-	    ; the firmware's own text cursor, even though the Firmware Guide's
-	    ; own entry for &BC0E doesn't spell that out explicitly.
-	    ld   a, 1
-	    call .core.__FW_CALL
-	    defw $BC0E
-	    ret
-	    ENDP
-	; __CPC_END -- the single choke point for a *clean* END (src/arch/cpc/
-	; backend/generic.py's _end emits "jp .core.__CPC_END" for every END in
-	; the program, instead of a bare RST 0). Reaching address 0 by itself
-; doesn't prove the program reached END: a crash that happens to reset
-	; the machine, or a runtime error (error.asm's __ERROR, also RST 0 after
-	; printing "Error n"), lands there too. This is forced into every build
-	; (bootstrap.asm is in common.REQUIRES unconditionally -- see the file
-	; header), so it's the one place a distinguishing marker can live for
-	; every program, not just ones that happen to #include some other file.
-	;
-	; Under -D __CPC_PRINTER_ECHO__ (cpcbuild's cpcrun.py test harness),
-	; sends __CPC_END_MARKER -- a line containing only "\x04END" -- to the
-	; printer via MC_PRINT_CHAR (&BD2B), through the gate, before the RST 0.
-	; \x04 (ASCII EOT) as the first byte makes the line unlike anything a
-	; Boriel program can PRINT (print.asm's control-code table drops or
-	; diverts every code below 32 except 6/8/13-23) and unlike the
-	; "NOT IMPLEMENTED" (stub.asm) / "Error n" (error.asm) text the same
-	; transcript can otherwise contain, so cpcrun.py can grep for it
-	; unambiguously and strip it from the reported transcript.
-	;
-	; Without the flag this is just "rst 0" -- no behaviour change, no
-	; firmware call, for a normal (non-test) build.
-	;
-; Firmware entry called: MC_PRINT_CHAR (&BD2B) -- printer-echo builds
-; only. Registers clobbered: none (never returns).
-#line 129 "src/lib/arch/cpc/runtime/bootstrap.asm"
-__CPC_END:
-#line 155 "src/lib/arch/cpc/runtime/bootstrap.asm"
-	    rst  0
-#line 157 "src/lib/arch/cpc/runtime/bootstrap.asm"
-	    pop namespace
-#line 43 "tests/functional/arch/cpc/float_arith.bas"
 #line 1 "src/lib/arch/cpc/runtime/math/sin.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC copy of zx48k/runtime/math/sin.asm, generated by replacing every

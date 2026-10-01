@@ -110,12 +110,6 @@ CORPUS: dict[str, str] = {
         BORDER 4
         END
     """,
-    "attr_stdlib": """
-        #include <attr.bas>
-        PRINT attr(1, 1)
-        setattr(1, 1, 5)
-        END
-    """,
     "graphics": """
         PLOT 10, 10
         DRAW 5, 5
@@ -123,9 +117,36 @@ CORPUS: dict[str, str] = {
         CIRCLE 10, 10, 5
         END
     """,
+    "graphics_mode_pixels": """
+        PLOT 319, 199
+        CIRCLE 160, 100, 90
+        PLOT OVER 1; INVERSE 1; INK 2; 0, 0
+        DRAW OVER 1; -300, -150
+        BORDER 3
+        END
+    """,
     "sound_and_pause": """
         BEEP 1, 1
         PAUSE 1
+        END
+    """,
+    "sound_runtime_args": """
+        DIM d, p AS FLOAT
+        d = 0.5
+        p = 12
+        BEEP d, p
+        END
+    """,
+    "cpc_stdlib": """
+        #include <cpc.bas>
+        #include <point.bas>
+        #include <input.bas>
+        Mode 0
+        SetInk 1, 6
+        SetBorder 3
+        WaitVsync
+        PRINT GetMode(), POINT(10, 10)
+        PRINT INPUT(10)
         END
     """,
     "inkey": """
@@ -153,11 +174,10 @@ CORPUS: dict[str, str] = {
 # reason. Kept out of CORPUS (they can't compile), but recorded here so
 # the gap isn't silently invisible.
 KNOWN_GAPS = {
-    "POINT()/SCREEN$()": (
-        "Not cpc-specific: neither exists as a language builtin on ANY "
-        "arch (checked against --arch zx48k too) -- 'POINT' / 'SCREEN$' "
-        "is neither an array nor a function, is not exported by any "
-        "stdlib .bas either. Not a gap introduced by this port."
+    "SCREEN$()": (
+        "Not cpc-specific: not a language builtin on any arch (checked "
+        "against --arch zx48k too), and no stdlib .bas exports it. Not a "
+        "gap introduced by this port. (POINT() is cpc stdlib point.bas.)"
     ),
 }
 

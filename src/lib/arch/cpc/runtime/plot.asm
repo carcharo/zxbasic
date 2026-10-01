@@ -1,19 +1,35 @@
-; Phase-1 stub for zx48k/runtime/plot.asm (was: PLOT x,y wrote a pixel
-; mask directly into Spectrum VRAM, via the ROM's PIXEL_ADDR &22AC and
-; the ROM sysvars COORDS/P_FLAG). None of that exists on the CPC. __PLOT
-; is exported too: circle.asm (inherited unchanged, pure Bresenham circle
-; math) calls it directly with the __FASTCALL__ (B,C)=(y,x) convention.
-; TODO(cpc): Phase 4a/4c -> firmware's GRA_PLOT_ABSOLUTE (&BBEA) or direct
-; mode-1 pixel addressing (design TBD).
+; -----------------------------------------------------------------------
+; Amstrad CPC -- PLOT x, y
+;
+; zx48k's plot.asm wrote a pixel mask into Spectrum VRAM via the ROM's
+; PIXEL_ADDR (&22AC). Here the firmware plots it: GRA_PLOT_ABSOLUTE
+; does the screen addressing for every mode, clips, and moves the
+; graphics cursor that DRAW continues from. Coordinates, colour and
+; OVER/INVERSE are as described in gfx.asm.
+;
+; Calling convention: the cpc parser makes both coordinates 16-bit
+; (src/arch/cpc/__init__.py GRAPHICS_COORD_TYPE), so X is pushed and Y
+; arrives in HL (zx48k: X byte pushed, Y byte in A).
 
-#include once <stub.asm>
+#include once <gfx.asm>
 
     push namespace core
 
 PLOT:
-    jp __CPC_NOT_IMPLEMENTED
+    pop  bc                 ; return address
+    pop  de                 ; DE = x
+    push bc
 
+; __PLOT -- DE = x, HL = y (mode pixels).
+; Firmware entry called: GRA_PLOT_ABSOLUTE (&BBEA, DE = x, HL = y
+; virtual), plus __GRA_PREP's.
+; Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF' (the
+; gate).
 __PLOT:
-    jp __CPC_NOT_IMPLEMENTED
+    call __GRA_PREP
+    call __GRA_XY
+    call .core.__FW_CALL
+    defw $BBEA              ; GRA_PLOT_ABSOLUTE
+    ret
 
     pop namespace

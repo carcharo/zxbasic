@@ -16,6 +16,7 @@
 ; file is never linked in at all), so the ___PRINT_IS_USED___ branch
 ; zx48k has is dropped.
 
+#include once <colour.asm>
 #include once <fwcall.asm>
 #include once <sysvars.asm>
 
@@ -55,8 +56,8 @@ __REFRESH_TMP:
     ENDP
 
 
-; Applies ATTR_T's ink/paper pens (mod 4 -- mode 1 has 4 pens, see
-; sysvars.asm's bit-layout comment) and P_FLAG's temporary INVERSE bit
+; Applies ATTR_T's ink/paper (Spectrum colours, mapped to pens of the
+; current mode by colour.asm's __INK_TO_PEN) and P_FLAG's temporary INVERSE bit
 ; (bit 2) to the firmware's current pen/paper. Always re-derives both
 ; pens from ATTR_T first (rather than tracking whether they're already
 ; inverted), so it's safe to call repeatedly as flags change mid-PRINT.
@@ -73,18 +74,16 @@ __SET_ATTR_MODE:
     PROC
     LOCAL __SAM_NOINV
 
-    ld a, (ATTR_T)
-    and 3                ; ink pen: bits 0-2 stored mod 8, mod 4 for the
-                          ; firmware is just the low 2 bits
+    ld a, (ATTR_T)       ; ink: bits 0-2, a Spectrum colour
+    call __INK_TO_PEN     ; -> pen of the current mode (colour.asm)
     call .core.__FW_CALL
     defw $BB90            ; TXT_SET_PEN
 
     ld a, (ATTR_T)
-    and 038h              ; paper: bits 3-5
     rrca
     rrca
-    rrca                  ; -> bits 0-2, mod 8
-    and 3                 ; mod 4 for the firmware
+    rrca                  ; paper: bits 3-5 -> bits 0-2
+    call __INK_TO_PEN
     call .core.__FW_CALL
     defw $BB96             ; TXT_SET_PAPER
 

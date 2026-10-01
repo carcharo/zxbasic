@@ -28,6 +28,7 @@
 
 #include once <sysvars.asm>
 #include once <fwcall.asm>
+#include once <colour.asm>
 
 #init .core.CPC_INIT_00_BOOTSTRAP
 
@@ -75,6 +76,14 @@ CPC_INIT_00_BOOTSTRAP:
     ld   a, $FF
     ld   (ERR_NR), a
 
+    ; Initial permanent attribute: INK 7 / PAPER 0 (white on black), which
+    ; colour.asm maps to the firmware's own default pens, pen 1 on pen 0
+    ; in mode 1 (yellow on blue). Set here, not by print.asm, because
+    ; PLOT/DRAW/CIRCLE use it too in programs that never PRINT; left at 0
+    ; it would be black on black, i.e. invisible.
+    ld   a, 7
+    ld   (ATTR_P), a
+
     ; SCREEN_ADDR: mode 1 screen base. SCREEN_ATTR_ADDR is left zeroed --
     ; see the placeholder note in sysvars.asm.
     ld   hl, $C000
@@ -93,10 +102,35 @@ CPC_INIT_00_BOOTSTRAP:
     ld   a, 1
     call .core.__FW_CALL
     defw $BC0E
+    ld   a, 1
+    call __CPC_SET_MODE_VARS    ; colour.asm: pen map, widths for mode 1
 
-    ret
+    ; Empty the key buffer: the RETURN that submitted RUN"<prog> can
+    ; still be in it, and the first INKEY$ or PAUSE would see it.
+    jp   __CPC_FLUSH_KEYS
 
     ENDP
+
+; __CPC_FLUSH_KEYS -- discards every character waiting in the firmware's
+; key buffer. KM_FLUSH (&BD3D) does this on the 664/6128 only, so this
+; reads characters with KM_READ_CHAR (&BB09, every model) until it
+; reports none (Carry clear).
+; Registers clobbered: AF (main); BC', DE', HL', AF' (the gate).
+__CPC_FLUSH_KEYS:
+    call .core.__FW_CALL
+    defw $BB09
+    jr   c, __CPC_FLUSH_KEYS
+    ret
+
+; __CPC_WAIT_KEY -- flushes stale keys, then waits for a new keypress
+; (KM_WAIT_KEY, &BB18). END and runtime errors use it so the program's
+; last screen stays visible until a key is pressed (notes.md question 1).
+; Registers clobbered: AF (main); BC', DE', HL', AF' (the gate).
+__CPC_WAIT_KEY:
+    call __CPC_FLUSH_KEYS
+    call .core.__FW_CALL
+    defw $BB18
+    ret
 
 ; __CPC_END -- the single choke point for a *clean* END (src/arch/cpc/
 ; backend/generic.py's _end emits "jp .core.__CPC_END" for every END in
@@ -118,11 +152,12 @@ CPC_INIT_00_BOOTSTRAP:
 ; transcript can otherwise contain, so cpcrun.py can grep for it
 ; unambiguously and strip it from the reported transcript.
 ;
-; Without the flag this is just "rst 0" -- no behaviour change, no
-; firmware call, for a normal (non-test) build.
+; Without the flag it waits for a key first (__CPC_WAIT_KEY), so the
+; program's output stays on screen (notes.md question 1), then resets.
 ;
-; Firmware entry called: MC_PRINT_CHAR (&BD2B) -- printer-echo builds
-; only. Registers clobbered: none (never returns).
+; Firmware entries called: MC_PRINT_CHAR (&BD2B) in printer-echo builds;
+; KM_READ_CHAR/KM_WAIT_KEY otherwise. Registers clobbered: none (never
+; returns).
 #ifdef __CPC_PRINTER_ECHO__
 __CPC_END_MARKER: DEFB 4, "END", 10, 0
 #endif
@@ -152,6 +187,7 @@ __CE_DONE:
     rst  0
     ENDP
 #else
+    call __CPC_WAIT_KEY
     rst  0
 #endif
 

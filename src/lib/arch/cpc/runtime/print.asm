@@ -38,7 +38,8 @@
 ;       __SAVE_S_POSN); no bounds check, matching zx48k's own embedded
 ;       AT (only the *statement* form, PRINT_AT below, checks bounds)
 ;   23  TAB -> consumes 2 bytes (only the first is used, matching
-;       zx48k) and pads with spaces up to that column mod 40
+;       zx48k) and pads with spaces up to that column, modulo the
+;       screen width (TXT_COLS: 20/40/80 by mode)
 ;   32-255  printed via TXT_OUTPUT
 ;
 ; Phase-3 printer echo (-D __CPC_PRINTER_ECHO__, cpcbuild's cpcrun.py):
@@ -89,22 +90,7 @@
 #include once <italic.asm>
 #include once <sysvars.asm>
 
-#init .core.CPC_INIT_PRINT
-
     push namespace core
-
-; Sets the initial permanent attribute to ink 1 / paper 0, matching the
-; firmware's own mode-1 default after SCR_SET_MODE (bootstrap.asm;
-; verified in the emulator -- see the Phase 2 report). bootstrap.asm's
-; zero-fill runs first and leaves ATTR_P at 0 (ink 0 = black), which
-; would make the very first PRINT's COPY_ATTR push black-on-black to
-; the firmware; this puts it back in step before that can happen.
-; Firmware entry called: none (memory only).
-; Registers clobbered: AF.
-CPC_INIT_PRINT:
-    ld a, 1
-    ld (ATTR_P), a
-    ret
 
 #ifdef __CPC_PRINTER_ECHO__
 ; __PRN_ECHO -- sends A to the printer (MC_PRINT_CHAR &BD2B), through
@@ -206,7 +192,9 @@ __PC_DEL:               ; cursor back one column, no VRAM erase
     jr z, __PC_DEL_RET  ; already at (0,0): nothing to do
     dec a
     ld d, a
-    ld e, SCR_COLS_VISIBLE - 1
+    ld a, (TXT_COLS)
+    dec a
+    ld e, a             ; last column of the current mode
     jr __PC_DEL_SAVE
 __PC_DEL_COL:
     dec e
@@ -413,24 +401,26 @@ PRINT_EOL:
 ; zones on its 32-column screen.
 PRINT_COMMA:
     PROC
-    LOCAL __PCM_LOW, __PCM_TARGET
+    LOCAL __PCM_HIGH, __PCM_TARGET
 
     call __LOAD_S_POSN   ; E = current column (0-based)
-    ld a, e
-    cp 20
-    jr c, __PCM_LOW
-    ld a, 40             ; -> PRINT_TAB's mod-40 wraps this to a newline
-    jr __PCM_TARGET
-__PCM_LOW:
-    ld a, 20
+    ld a, (TXT_COLS)
+    srl a                ; half the screen width: 10/20/40
+    cp e
+    jr z, __PCM_HIGH
+    jr nc, __PCM_TARGET  ; left half: tab to the middle
+__PCM_HIGH:
+    ld a, (TXT_COLS)     ; right half: PRINT_TAB's modulo wraps this to
+                         ; a newline
 __PCM_TARGET:
     jp PRINT_TAB
     ENDP
 
 
 ; Tabulates: prints spaces (via __PRINTCHAR, so the firmware's own
-; wrap/scroll applies normally) until the column reaches A, mod 40. If
-; already there, does nothing.
+; wrap/scroll applies normally) until the column reaches A, modulo the
+; current mode's width (TXT_COLS, colour.asm). If already there, does
+; nothing.
 ;
 ; zx48k's own PRINT_TAB computes the same thing with `sub e` then `and
 ; 31`: on its 32-column screen that's a valid mod-32 (32 is a power of
@@ -439,24 +429,26 @@ __PCM_TARGET:
 ; equivalent `and 39` mask is *wrong* here -- e.g. a raw delta of 10
 ; (0x0A) survives it unchanged (10 AND 39 = 2, not 10: 39 is 0b0100111,
 ; not 0b0100111...1, so it clears bit 3 too). Reduce the target
-; explicitly mod 40 first, then wrap a negative difference by adding 40
-; instead.
+; explicitly modulo the width first, then wrap a negative difference by
+; adding the width instead.
 PRINT_TAB:
     PROC
     LOCAL __PT_LOOP, __PT_REDUCE, __PT_GOTTARGET, __PT_POS
 
-__PT_REDUCE:            ; A (target column, as passed) mod 40
-    cp 40
+    ld hl, TXT_COLS
+__PT_REDUCE:            ; A (target column, as passed) mod TXT_COLS
+    cp (hl)
     jr c, __PT_GOTTARGET
-    sub 40
+    sub (hl)
     jr __PT_REDUCE
 
 __PT_GOTTARGET:
     call __LOAD_S_POSN  ; E = current column (0-based); A (the reduced
                          ; target) survives the call -- see sposn.asm
-    sub e                ; A = target - current, signed
+    sub e                ; A = target - current, signed (|A| < 80)
     jp p, __PT_POS
-    add a, 40             ; wrap a negative difference into 0-39
+    ld hl, TXT_COLS
+    add a, (hl)           ; wrap a negative difference into the line
 __PT_POS:
     or a
     ret z
@@ -472,8 +464,8 @@ __PT_LOOP:
 
 ; PRINT_AT: changes the cursor to ROW, COL (COL in A, ROW pushed on the
 ; stack -- the compiler's own calling convention for `PRINT AT r,c`,
-; unchanged from zx48k). Row 0-24, column 0-39 (Boriel's 0-based
-; convention). Out of range: __STOP (error.asm) sets ERR_NR and
+; unchanged from zx48k). Row 0-24, column 0 to TXT_COLS-1 (0-19, 0-39
+; or 0-79 by mode; Boriel's 0-based convention). Out of range: __STOP (error.asm) sets ERR_NR and
 ; returns without moving the cursor -- the same "soft" behaviour
 ; zx48k's own in_screen.asm gives PRINT AT (unlike a hard runtime
 ; error, this does not print "Error n" or reset; the rest of the PRINT
@@ -490,9 +482,10 @@ PRINT_AT:
     ld a, d
     cp SCR_ROWS
     jr nc, __PA_ERR
-    ld a, e
-    cp SCR_COLS_VISIBLE
-    jr nc, __PA_ERR
+    ld a, (TXT_COLS)
+    dec a
+    cp e
+    jr c, __PA_ERR        ; column > last column of the current mode
 
     call __SAVE_S_POSN
 #ifdef __CPC_PRINTER_ECHO__
