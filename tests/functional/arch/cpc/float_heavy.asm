@@ -410,8 +410,19 @@ _doubleIt__leave:
 	;                                    the central 32K -- it is)
 ;   $B5     10    CIRC_VARS          circle.asm: centre X/Y, x, y, d
 ;   $BF     1     PAUSE_TICK         pause.asm: last 300 Hz tick count
+;   $C0     1     CB_BASE            cpcbuild/core.asm: high byte of the
+	;                                    screen the library draws on (&C0, or
+	;                                    &40 for the double-buffer back screen)
+;   $C1     1     CB_SHOWN           cpcbuild/core.asm: high byte of the
+	;                                    screen being displayed
+;   $C2     2     CB_OFFSET          cpcbuild/core.asm: the firmware's
+	;                                    hardware-scroll offset, 0-&7FE bytes
+;   $C4     1     CB_DBUF            cpcbuild/core.asm: 1 = double buffering
+;   $C5     2     CB_TILESET         cpcbuild tiles: current tileset
+;   $C7     10    CB_KEYS            cpcbuild keyboard: the last matrix
+;                                    scan, rows 0-9 (bit = 0: pressed)
 	;   ------  ----
-	;   $C0     (192 bytes used)
+	;   $D1     (209 bytes used)
 	;
 	; --- ATTR_P / ATTR_T bit layout (one byte, same shape as zx48k's) ------
 	;
@@ -424,7 +435,7 @@ _doubleIt__leave:
 	;   6     BRIGHT flag (bright.asm) -- accepted, ignored (notes.md Q5)
 	;   7     FLASH flag (flash.asm) -- accepted, ignored (notes.md Q5)
 	;
-	; $C0 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
+	; $D1 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
 	; below lets it be compared against .core.CPC_PRIV_SIZE by eye whenever
 	; this table grows.
 	    push namespace core
@@ -475,7 +486,13 @@ _doubleIt__leave:
 	SOUND_BLK           EQU SYSVAR_BASE + $AC   ; 9B -- SOUND_QUEUE block (beep.asm)
 	CIRC_VARS           EQU SYSVAR_BASE + $B5   ; 10B -- CIRCLE state (circle.asm)
 	PAUSE_TICK          EQU SYSVAR_BASE + $BF   ; DB -- PAUSE's last tick count (pause.asm)
-	CPC_SYSVARS_USED    EQU $C0                 ; bytes used above; compare by eye against
+	CB_BASE             EQU SYSVAR_BASE + $C0   ; DB -- screen the library draws on (high byte)
+	CB_SHOWN            EQU SYSVAR_BASE + $C1   ; DB -- screen displayed (high byte)
+	CB_OFFSET           EQU SYSVAR_BASE + $C2   ; DW -- hardware-scroll offset (bytes)
+	CB_DBUF             EQU SYSVAR_BASE + $C4   ; DB -- 1 = double buffering on
+	CB_TILESET          EQU SYSVAR_BASE + $C5   ; DW -- current tileset address
+	CB_KEYS             EQU SYSVAR_BASE + $C7   ; 10B -- keyboard matrix scan
+	CPC_SYSVARS_USED    EQU $D1                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
 ; The column count follows the screen mode at run time (TXT_COLS above:

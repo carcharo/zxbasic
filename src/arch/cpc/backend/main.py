@@ -54,6 +54,17 @@ class Backend(Z80Backend):
     # generic post-assembly memory-layout check.
     MAX_CODE_ADDRESS = _PRIV_BASE
 
+    # Address ranges reserved only in programs that define the label
+    # (checked by zxbc's memory-layout check): EnableDoubleBuffer
+    # (cpcbuild/display.bas) makes &4000-&7FFF the back screen.
+    RESERVED_RANGE_LABELS = {
+        ".core.__CB_DBUF_RESERVED": (
+            0x4000,
+            0x8000,
+            "the program uses double buffering (cpcbuild EnableDoubleBuffer: the back screen)",
+        ),
+    }
+
     def init(self):
         super().init()
 

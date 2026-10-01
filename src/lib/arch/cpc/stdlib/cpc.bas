@@ -5,8 +5,8 @@
 '                     1 (320x200, 4 pens, 40 columns) or 2 (640x200,
 '                     2 pens, 80 columns); clears the screen
 '   GetMode()         the current screen mode
-'   SetInk pen, c     sets a pen to hardware colour c (0-26)
-'   SetBorder c       sets the border to hardware colour c (0-26)
+'   SetInk pen, c     sets a pen to firmware colour c (0-26), at once
+'   SetBorder c       sets the border to firmware colour c (0-26), at once
 '   WaitVsync         waits for the start of the next frame flyback
 '
 ' INK/PAPER/BORDER keep taking Spectrum colours 0-7, mapped to pens of
@@ -56,24 +56,22 @@ function fastcall GetMode as ubyte
 end function
 
 ' Firmware: SCR_SET_INK (&BC32, A = pen, B and C = the colour twice,
-' i.e. not flashing).
+' i.e. not flashing); then the same colour straight to the Gate Array,
+' so it shows at once (runtime/cpcbuild/palette.asm). Pens 0-15 (use
+' SetBorder for the border); pens above 15 and colours above 26 are ignored.
 sub SetInk(pen as ubyte, colour as ubyte)
     asm
     ld a, (ix+5)
-    ld b, (ix+7)
-    ld c, b
-    call .core.__FW_CALL
-    defw $BC32
+    ld c, (ix+7)
+    call .core.__CB_SET_INK
     end asm
 end sub
 
-' Firmware: SCR_SET_BORDER (&BC38, B and C = the colour).
+' Firmware: SCR_SET_BORDER (&BC38, B and C = the colour); then the same
+' colour straight to the Gate Array. Colours above 26 are ignored.
 sub fastcall SetBorder(colour as ubyte)
     asm
-    ld b, a
-    ld c, a
-    call .core.__FW_CALL
-    defw $BC38
+    call .core.__CB_SET_BORDER
     end asm
 end sub
 
@@ -91,5 +89,6 @@ end sub
 #require "fwcall.asm"
 #require "colour.asm"
 #require "cls.asm"
+#require "cpcbuild/palette.asm"
 
 #endif
