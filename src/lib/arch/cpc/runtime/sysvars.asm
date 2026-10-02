@@ -134,8 +134,10 @@
 ;   $C5     2     CB_TILESET         cpcbuild tiles: current tileset
 ;   $C7     10    CB_KEYS            cpcbuild keyboard: the last matrix
 ;                                    scan, rows 0-9 (bit = 0: pressed)
+;   $D1     16    SND_ENV            fwsound.asm: volume envelope data
+;                                    buffer for SOUND_AMPL_ENVELOPE
 ;   ------  ----
-;   $D1     (209 bytes used)
+;   $E1     (225 bytes used)
 ;
 ; --- ATTR_P / ATTR_T bit layout (one byte, same shape as zx48k's) ------
 ;
@@ -148,7 +150,7 @@
 ;   6     BRIGHT flag (bright.asm) -- accepted, ignored (notes.md Q5)
 ;   7     FLASH flag (flash.asm) -- accepted, ignored (notes.md Q5)
 ;
-; $D1 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
+; $E1 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
 ; below lets it be compared against .core.CPC_PRIV_SIZE by eye whenever
 ; this table grows.
 
@@ -218,7 +220,9 @@ CB_DBUF             EQU SYSVAR_BASE + $C4   ; DB -- 1 = double buffering on
 CB_TILESET          EQU SYSVAR_BASE + $C5   ; DW -- current tileset address
 CB_KEYS             EQU SYSVAR_BASE + $C7   ; 10B -- keyboard matrix scan
 
-CPC_SYSVARS_USED    EQU $D1                 ; bytes used above; compare by eye against
+SND_ENV             EQU SYSVAR_BASE + $D1   ; 16B -- envelope data buffer (fwsound.asm)
+
+CPC_SYSVARS_USED    EQU $E1                 ; bytes used above; compare by eye against
                                              ; .core.CPC_PRIV_SIZE when this table grows
 
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------

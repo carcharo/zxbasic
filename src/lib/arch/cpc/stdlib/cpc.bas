@@ -10,6 +10,14 @@
 '   WaitVsync         waits for the start of the next frame flyback
 '   AyWrite reg, v    writes sound chip (AY-3-8912) register reg (0-15)
 '   AyRead(reg)       reads sound chip register reg (0-15)
+'   SoundQueue(ch, period, dur, vol, env)
+'                     queues a note on the firmware sound manager and
+'                     returns at once: 1 queued, 0 queue full
+'   SoundFree(ch)     free queue slots (0-4) of channel ch
+'   SoundBusy(ch)     1 if channel ch is playing or has notes queued
+'   SoundEnvelope n, @data, sections
+'                     defines volume envelope n (1-15)
+'   SoundStop         empties every queue and silences the chip
 '
 ' INK/PAPER/BORDER keep taking Spectrum colours 0-7, mapped to pens of
 ' the current mode (runtime/colour.asm). SetInk changes what colour a
@@ -22,13 +30,56 @@
 ' 21 lime, 22 pastel green, 23 pastel cyan, 24 bright yellow,
 ' 25 pastel yellow, 26 bright white.
 '
+' Firmware sound (non-blocking; BEEP queues a note and waits, these never
+' wait). The firmware's sound manager plays from its 300 Hz interrupt
+' handler, which always runs in compiled code, so a note queued here
+' sounds while the program carries on. Each of the 3 channels has a queue
+' of 4 notes (the one playing is not counted: up to 5 in all).
+'
+'   SoundQueue(channels, period, duration, volume, envelope) AS UBYTE
+'     channels: 1 = A, 2 = B, 4 = C, or OR'd (the same note on several).
+'       Add 8/16/32 for a rendezvous with A/B/C (the note waits until the
+'       other channel's note is also waiting for it: keeps channels in
+'       step), 128 to flush the queues first (the note starts at once).
+'     period: the AY's tone period, 0-4095 (above that is clamped):
+'       period = 62500 / frequency in Hz (the AY runs at 1 MHz; middle C,
+'       262 Hz, is 239; A 440 Hz is 142). Bigger = lower.
+'     duration: in 1/100 s, 1-32767. 0 = one run of the volume envelope.
+'       Negative: repeats the envelope that many times (65536 - n).
+'     volume: starting volume 0-15 (the volume envelope, if any, then
+'       changes it). CPC464 firmware (1.0) quirk: with no envelope its
+'       volumes are 0-7 (doubled into the AY's 0-15; 8-15 wrap to 0-14),
+'       so use an envelope, or 7 / 15 for loud, if the 464 matters. With
+'       an envelope, 0-15 on every model.
+'     envelope: volume envelope number 1-15 (SoundEnvelope), 0 = none.
+'     Returns 1 if the note was queued, 0 if that channel's queue was
+'     full (nothing is queued; try again later). When several channels
+'     are given, the result is the last one's.
+'   SoundFree(channel)  channel is 1, 2 or 4: how many more notes can be
+'     queued on it (0-4).
+'   SoundBusy(channel)  1 while that channel is playing a note or has any
+'     queued, else 0.
+'   SoundEnvelope n, @data, sections
+'     Defines volume envelope n (1-15), which SoundQueue then refers to.
+'     data: sections * 3 bytes (1-5 sections), played in order; per
+'     section: step count (1-127), step size (signed, added to the volume
+'     per step, volume 0-15), pause per step in 1/100 s (0-255). Example,
+'     a decay from 15 to 0 in 15 steps of 2/100 s (0.3 s):
+'        DIM decay(2) AS UBYTE = {15, 255, 2}: SoundEnvelope 1, @decay(0), 1
+'     The data is copied; the array can be reused at once. A section
+'     whose first byte has bit 7 set is a hardware envelope (the AY's own
+'     envelope generator: shape in bits 0-3, then the period, 2 bytes).
+'   SoundStop  the firmware's SOUND_RESET: all queues emptied, all
+'     channels silenced.
+'
 ' Sound chip ownership: the firmware's sound manager (SOUND, BEEP) runs
 ' from the interrupt handler and writes the AY by itself whenever a note
 ' is queued. A program that drives the AY directly (AyWrite, or the Play
 ' library, which does) must not also queue firmware sounds: call the
 ' firmware's SOUND_RESET (&BCA7) once first to make the manager idle (Play
 ' does), and don't use BEEP/SOUND afterwards without expecting the chip
-' to be reprogrammed. AyWrite/AyRead switch interrupts off for the
+' to be reprogrammed (so: SoundStop first, and never queue firmware
+' sounds while Play or AyWrite are in use). AyWrite/AyRead switch interrupts off for the
 ' access (the firmware's keyboard scan shares the PPI) and return with
 ' them on. Register 7 (mixer): keep bits 6-7 clear, bit 6 makes the
 ' keyboard port an output and the keyboard stops reading.
@@ -117,6 +168,58 @@ function fastcall AyRead(reg as ubyte) as ubyte
     end asm
 end function
 
+' Queues a note on the firmware sound manager and returns at once; see the
+' header for the arguments. Firmware: SOUND_QUEUE (&BCAA).
+function SoundQueue(channels as ubyte, period as uinteger, duration as uinteger, volume as ubyte, envelope as ubyte) as ubyte
+    asm
+    ld l, (ix+6)
+    ld h, (ix+7)
+    ld e, (ix+8)
+    ld d, (ix+9)
+    ld a, (ix+5)
+    ld b, (ix+11)
+    ld c, (ix+13)
+    call .core.__CPC_SND_QUEUE
+    end asm
+end function
+
+' Free queue slots of one channel (1, 2 or 4), 0-4.
+' Firmware: SOUND_CHECK (&BCAD).
+function fastcall SoundFree(channel as ubyte) as ubyte
+    asm
+    call .core.__CPC_SND_CHECK
+    and 7
+    end asm
+end function
+
+' 1 if the channel (1, 2 or 4) is playing a note or has notes queued.
+' Firmware: SOUND_CHECK (&BCAD).
+function fastcall SoundBusy(channel as ubyte) as ubyte
+    asm
+    call .core.__CPC_SND_BUSY
+    end asm
+end function
+
+' Defines volume envelope n (1-15) from sections * 3 bytes at the address.
+' Firmware: SOUND_AMPL_ENVELOPE (&BCBC).
+sub SoundEnvelope(n as ubyte, addr as uinteger, sections as ubyte)
+    asm
+    ld a, (ix+5)
+    ld l, (ix+6)
+    ld h, (ix+7)
+    ld b, (ix+9)
+    call .core.__CPC_SND_ENV
+    end asm
+end sub
+
+' Empties all sound queues and silences the chip. Firmware: SOUND_RESET
+' (&BCA7).
+sub SoundStop
+    asm
+    call .core.__CPC_SND_RESET
+    end asm
+end sub
+
 #pragma pop(case_insensitive)
 
 #require "fwcall.asm"
@@ -124,5 +227,6 @@ end function
 #require "cls.asm"
 #require "cpcbuild/palette.asm"
 #require "ay.asm"
+#require "fwsound.asm"
 
 #endif
