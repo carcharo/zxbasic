@@ -8,6 +8,8 @@
 '   SetInk pen, c     sets a pen to firmware colour c (0-26), at once
 '   SetBorder c       sets the border to firmware colour c (0-26), at once
 '   WaitVsync         waits for the start of the next frame flyback
+'   AyWrite reg, v    writes sound chip (AY-3-8912) register reg (0-15)
+'   AyRead(reg)       reads sound chip register reg (0-15)
 '
 ' INK/PAPER/BORDER keep taking Spectrum colours 0-7, mapped to pens of
 ' the current mode (runtime/colour.asm). SetInk changes what colour a
@@ -19,6 +21,17 @@
 ' 17 pastel magenta, 18 bright green, 19 sea green, 20 bright cyan,
 ' 21 lime, 22 pastel green, 23 pastel cyan, 24 bright yellow,
 ' 25 pastel yellow, 26 bright white.
+'
+' Sound chip ownership: the firmware's sound manager (SOUND, BEEP) runs
+' from the interrupt handler and writes the AY by itself whenever a note
+' is queued. A program that drives the AY directly (AyWrite, or the Play
+' library, which does) must not also queue firmware sounds: call the
+' firmware's SOUND_RESET (&BCA7) once first to make the manager idle (Play
+' does), and don't use BEEP/SOUND afterwards without expecting the chip
+' to be reprogrammed. AyWrite/AyRead switch interrupts off for the
+' access (the firmware's keyboard scan shares the PPI) and return with
+' them on. Register 7 (mixer): keep bits 6-7 clear, bit 6 makes the
+' keyboard port an output and the keyboard stops reading.
 ' ----------------------------------------------------------------
 
 #ifndef __LIBRARY_CPC__
@@ -84,11 +97,32 @@ sub fastcall WaitVsync
     end asm
 end sub
 
+' Writes AY register reg (0-15) with value; direct PPI access with
+' interrupts off for the write, back on afterwards (runtime/ay.asm).
+' Firmware: none. See the header about sound ownership.
+sub AyWrite(reg as ubyte, value as ubyte)
+    asm
+    ld a, (ix+5)
+    ld c, (ix+7)
+    call .core.__CPC_AY_WRITE_DI
+    end asm
+end sub
+
+' Reads AY register reg (0-15); bits a register doesn't implement read as
+' 0. Direct PPI access with interrupts off for the read, back on after.
+' Firmware: none.
+function fastcall AyRead(reg as ubyte) as ubyte
+    asm
+    call .core.__CPC_AY_READ_DI
+    end asm
+end function
+
 #pragma pop(case_insensitive)
 
 #require "fwcall.asm"
 #require "colour.asm"
 #require "cls.asm"
 #require "cpcbuild/palette.asm"
+#require "ay.asm"
 
 #endif
