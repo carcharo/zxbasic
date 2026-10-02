@@ -47,10 +47,10 @@
 '     duration: in 1/100 s, 1-32767. 0 = one run of the volume envelope.
 '       Negative: repeats the envelope that many times (65536 - n).
 '     volume: starting volume 0-15 (the volume envelope, if any, then
-'       changes it). CPC464 firmware (1.0) quirk: with no envelope its
-'       volumes are 0-7 (doubled into the AY's 0-15; 8-15 wrap to 0-14),
-'       so use an envelope, or 7 / 15 for loud, if the 464 matters. With
-'       an envelope, 0-15 on every model.
+'       changes it). Same loudness on every model: with no envelope
+'       the 464's firmware (1.0) only has volumes 0-7 (doubled into the
+'       AY's 0-15), so there v plays as the nearest even volume (15 as
+'       14, 1 as 2); with an envelope 0-15 everywhere.
 '     envelope: volume envelope number 1-15 (SoundEnvelope), 0 = none.
 '     Returns 1 if the note was queued, 0 if that channel's queue was
 '     full (nothing is queued; try again later). When several channels

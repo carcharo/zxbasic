@@ -19,6 +19,7 @@
 
 #include once <fwcall.asm>
 #include once <sysvars.asm>
+#include once <isr.asm>
 
     push namespace core
 
@@ -27,6 +28,10 @@
 ; hold is cleared, nothing would release it), HL = tone period (clamped
 ; to 4095), DE = duration in 1/100 s (0 = one run of the volume
 ; envelope), B = start volume (0-15), C = volume envelope (0 = none).
+; With no envelope the 464's firmware (1.0, found from its interrupt
+; handler's address, isr.asm) takes volumes 0-7 and doubles them, so v
+; is passed as min(7, (v + 1) / 2) there: the AY gets the even volume
+; nearest v (15 -> 14, 1 -> 2), as close as that firmware can get.
 ; Out: A = 1 if queued, 0 if the channel's queue was full.
 ; Firmware entries called: SOUND_QUEUE (&BCAA, HL = block; Carry =
 ; queued; corrupts IX, so via __FW_CALL_IX).
@@ -43,6 +48,23 @@ __SND_PER_OK:
     ld   (SOUND_BLK + 7), de
     ld   a, b
     and  $0F
+    ld   b, a
+    ld   a, c
+    or   a
+    jr   nz, __SND_VOL_OK       ; with an envelope every model takes 0-15
+    ld   a, (__CPC_ISR_ORIG + 1)
+    cp   $39                    ; firmware 1.0 (the 464): handler at &B939
+    jr   nz, __SND_VOL_OK
+    ld   a, b                   ; its volumes are 0-7 (doubled into the AY's
+    inc  a                      ; 0-15): nearest = min(7, (v + 1) / 2)
+    srl  a
+    cp   8
+    jr   c, __SND_VOL_464
+    ld   a, 7
+__SND_VOL_464:
+    ld   b, a
+__SND_VOL_OK:
+    ld   a, b
     ld   (SOUND_BLK + 6), a
     ld   a, c
     ld   (SOUND_BLK + 1), a
