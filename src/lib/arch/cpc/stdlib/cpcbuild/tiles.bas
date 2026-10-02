@@ -13,6 +13,16 @@
 '                               numbers being bytes at map (row-major, w
 '                               per row), top-left at cell (x, y); cells
 '                               off the screen are skipped
+'   TileMapPart(map, mapw, x, y, w, h)
+'                               the same for a block out of a wider map:
+'                               its rows are mapw bytes apart (mapw >= w)
+'   TileRestore(map, mapw, x, y, w, h)
+'                               redraws the tiles under a screen rectangle
+'                               (x in bytes, y in lines, w bytes by h
+'                               lines) from a map of mapw bytes per row
+'                               drawn from cell (0, 0): every cell the
+'                               rectangle touches. Erases a sprite in one
+'                               call: TileRestore(@map, 20, x, y, 4, 16)
 '
 ' A tile is 8x8 pixels: 8 rows top first, each row's bytes left to
 ' right: 8 bytes in mode 2, 16 in mode 1, 32 in mode 0. The tile width
@@ -73,6 +83,36 @@ sub TileMap(map as uinteger, x as ubyte, y as ubyte, w as ubyte, h as ubyte)
     ld c, (ix+11)
     ld b, (ix+13)
     call __CB_TILEMAP
+    pop namespace
+    end asm
+end sub
+
+sub TileMapPart(map as uinteger, mapw as ubyte, x as ubyte, y as ubyte, w as ubyte, h as ubyte)
+    asm
+    push namespace core
+    ld l, (ix+4)
+    ld h, (ix+5)
+    ld e, (ix+9)
+    ld d, (ix+11)
+    ld c, (ix+13)
+    ld b, (ix+15)
+    ld a, (ix+7)
+    call __CB_TILEMAP_S
+    pop namespace
+    end asm
+end sub
+
+sub TileRestore(map as uinteger, mapw as ubyte, x as ubyte, y as ubyte, w as ubyte, h as ubyte)
+    asm
+    push namespace core
+    ld l, (ix+4)
+    ld h, (ix+5)
+    ld e, (ix+9)
+    ld d, (ix+11)
+    ld c, (ix+13)
+    ld b, (ix+15)
+    ld a, (ix+7)
+    call __CB_TILE_RESTORE
     pop namespace
     end asm
 end sub
