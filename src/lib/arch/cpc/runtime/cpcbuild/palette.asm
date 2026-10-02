@@ -8,8 +8,7 @@
 ; A colour change goes two ways (notes.md, Q-4c palette decision): through
 ; the firmware (SCR_SET_INK / SCR_SET_BORDER), so its own ink tables stay
 ; right, and straight to the Gate Array, so it shows at once instead of
-; at the next frame flyback that happens to run inside a firmware call
-; (interrupts are off in compiled code).
+; at the firmware's next ink update.
 ;
 ; Gate Array write (port &7Fxx): first a pen-select byte (0-15, or &10
 ; for the border), then a colour byte &40 + hardware colour code (0-31).
@@ -27,7 +26,9 @@ __CB_HWCOL:
 
 ; __CB_GA_SET -- writes one colour to the Gate Array only (the firmware's
 ; tables are not touched). A = pen 0-15, or 16 for the border; C =
-; firmware colour 0-26. Out-of-range values are ignored.
+; firmware colour 0-26. Out-of-range values are ignored. The two writes
+; are made with interrupts off (the firmware's interrupt handler selects
+; pens too, for flashing inks), and it returns with interrupts on.
 ; Firmware entries called: none.
 ; Registers clobbered: AF, BC, HL.
 __CB_GA_SET:
@@ -49,8 +50,10 @@ __CGS_NOADD:
     ld   c, (hl)            ; C = colour byte
     ld   a, b
     ld   b, $7F             ; port &7Fxx; the low byte is ignored
+    di
     out  (c), a             ; select the pen
     out  (c), c             ; colour: data = C
+    ei
     ret
     ENDP
 

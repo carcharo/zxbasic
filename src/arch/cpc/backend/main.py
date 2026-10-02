@@ -110,9 +110,9 @@ class Backend(Z80Backend):
           org {OPTIONS.org}          (default $1000)
           .core.CPC_* EQUs           (memory-map constants for runtime asm)
           {START_LABEL}:
-            di                      ; interrupts stay off until a future
-                                     ; firmware gate enables them for the
-                                     ; duration of a firmware call
+            di                      ; off until the bootstrap has put in
+                                     ; the interrupt front-end (isr.asm);
+                                     ; its first firmware call turns them on
             ld sp, .core.CPC_STACK_TOP
             call <#init routines>   ; e.g. .core.CPC_INIT_SYSVARS
             jp   {MAIN_LABEL}

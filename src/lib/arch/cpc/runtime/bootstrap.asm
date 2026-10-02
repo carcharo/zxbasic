@@ -28,6 +28,7 @@
 
 #include once <sysvars.asm>
 #include once <fwcall.asm>
+#include once <isr.asm>
 #include once <colour.asm>
 
 #init .core.CPC_INIT_00_BOOTSTRAP
@@ -36,8 +37,9 @@
 
 ; CPC_INIT_00_BOOTSTRAP -- captures FW_BC, zero-fills the private
 ; runtime block ($9E00-$A1FF, .core.CPC_PRIV_BASE for
-; .core.CPC_PRIV_SIZE bytes), sets the few sysvars that need a
-; non-zero default, then sets screen MODE 1 through the firmware gate.
+; .core.CPC_PRIV_SIZE bytes), installs the interrupt front-end, sets the
+; few sysvars that need a non-zero default, then sets screen MODE 1
+; through the firmware gate (which turns interrupts on for good).
 ;
 ; FW_BC is captured first, before the zero-fill, but can't be written
 ; to its sysvar slot yet -- that slot is about to be zeroed along with
@@ -70,6 +72,11 @@ CPC_INIT_00_BOOTSTRAP:
     ; IN_FW stays 0, which the zero-fill already set.
     pop  bc
     ld   (FW_BC), bc
+
+    ; Our interrupt front-end (isr.asm) goes in before anything enables
+    ; interrupts: the first firmware call below returns with them on,
+    ; and they stay on from then on.
+    call __CPC_ISR_INSTALL
 
     ; ERR_NR: -1 means "no error", not 0 (matches the ZX Spectrum manual's
     ; convention).
@@ -184,10 +191,12 @@ __CE_SENT:
     pop  hl
     jr   __CE_LOOP
 __CE_DONE:
+    di                  ; the firmware's reset rebuilds the &0038 vector
     rst  0
     ENDP
 #else
     call __CPC_WAIT_KEY
+    di
     rst  0
 #endif
 

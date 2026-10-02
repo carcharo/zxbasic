@@ -549,10 +549,14 @@ _doubleIt__leave:
 	; B' = &7F (gate array port) and C' = current ROM/mode config, and the
 	; 300 Hz interrupt handler also uses BC' and branches on AF' carry
 	; ("already inside an interrupt"). Compiled code clobbers both freely
-	; (SUB epilogues pop into BC'; div8/div16/float pushes use AF') and runs
-; with interrupts off. So every firmware call goes through this gate: it
-	; restores BC' from the FW_BC shadow, clears AF' carry, enables
-	; interrupts only for the call, then captures BC' back (mode/ROM changes).
+	; (SUB epilogues pop into BC'; div8/div16/float pushes use AF'). So every
+; firmware call goes through this gate: with interrupts off it sets IN_FW,
+	; restores BC' from the FW_BC shadow and clears AF' carry, makes the call
+	; with interrupts on, then (off again) captures BC' back (mode/ROM
+	; changes) and clears IN_FW. Outside the gate interrupts go through
+	; isr.asm, which does the same register hand-over for the firmware's
+	; interrupt handler; IN_FW tells it the firmware's registers are already
+	; loaded. The gate always returns with interrupts on.
 	;
 	; Usage (A, F, BC, DE, HL go in as set and come back as the firmware left
 ; them, flags included):
@@ -561,11 +565,12 @@ _doubleIt__leave:
 	;     defw $BB5A                  ; which corrupt IX (Boriel's frame pointer)
 	;
 	; Clobbers BC', DE', HL', AF' (never meaningful to compiled code across a
-; call). Not re-entrant: fine, only ROM code runs while interrupts are on.
-; Cost: about 210 T-states plus the firmware routine.
+	; call). Not re-entrant (the interrupt handler never calls it).
+; Cost: about 220 T-states plus the firmware routine.
 	    push namespace core
 __FW_CALL:
 	    PROC
+	    di                  ; IN_FW and BC' must change together (isr.asm)
 	    exx                 ; alternate bank is scratch; caller's regs stay put
 	    pop  hl             ; HL -> defw after the call
 	    ld   e, (hl)
@@ -590,10 +595,12 @@ __FW_CALL_TARGET:
 	    ld   hl, IN_FW
 	    ld   (hl), 0
 	    exx
+	    ei
 	    ret
 	    ENDP
 __FW_CALL_IX:
 	    PROC
+	    di
 	    exx
 	    pop  hl
 	    ld   e, (hl)
@@ -620,6 +627,7 @@ __FW_CALL_IX_TARGET:
 	    ld   hl, IN_FW
 	    ld   (hl), 0
 	    exx
+	    ei
 	    ret
 	    ENDP
 	    pop namespace
@@ -652,6 +660,98 @@ __FW_CALL_IX_TARGET:
 	; (digits are below uppercase letters in ASCII), which is a stronger
 	; guarantee than just renaming past today's one clash. Nothing else
 	; references the old CPC_INIT_SYSVARS name.
+#line 1 "src/lib/arch/cpc/runtime/isr.asm"
+	; -----------------------------------------------------------------------
+	; Amstrad CPC interrupt front-end
+	;
+	; Compiled code runs with interrupts on. The firmware's 300 Hz handler
+	; needs BC' = its own value (B' = &7F, the Gate Array port; C' = the
+	; ROM/mode configuration) and AF' carry clear (carry set means "interrupt
+	; inside an interrupt"), but compiled code uses the alternate registers
+	; freely (SUB epilogues, 32-bit/float pushes, the FP calculator). So the
+; RAM vector at &0038 is pointed here: this handler saves both register
+	; banks, hands the firmware its BC' (the FW_BC shadow, fwcall.asm) and a
+	; clear AF' carry, runs the original handler, keeps any change it made
+	; to BC', and restores everything.
+	;
+	; The RAM vector is only seen while the lower ROM is off, i.e. while our
+	; code (or firmware code running from RAM) executes. With the lower ROM
+	; on, the ROM's own &0038 goes straight to the firmware.
+	;
+	; Inside a firmware call (IN_FW = 1, set by the gate) the alternate
+	; registers already hold the firmware's values, so the handler jumps
+	; straight to the original. IN_FW also stays 1 while the original runs
+; from here: it ends with "ei; ret", so an interrupt can arrive before
+	; our "di", and the firmware's registers are still loaded then.
+	;
+	; The original handler (RAM &B941 on the 6128, &B939 on the 464; the
+	; same code in both ROMs) is read from the vector at boot.
+	;
+; Cost: about 250 T-states on top of the firmware's handler, 300 times
+	; a second. See cpcbuild docs/phase4d-design.md.
+	    push namespace core
+	; __CPC_ISR_INSTALL -- points the RAM vector at &0038 to __CPC_ISR,
+	; keeping the original jump target. Call with interrupts off (the
+	; bootstrap does, before its first firmware call).
+; Firmware entries called: none. Registers clobbered: AF, HL.
+__CPC_ISR_INSTALL:
+	    ld   hl, ($0039)
+	    ld   (__CPC_ISR_ORIG + 1), hl
+	    ld   a, $C3             ; JP nn
+	    ld   ($0038), a
+	    ld   hl, __CPC_ISR
+	    ld   ($0039), hl
+	    ret
+	; __CPC_ISR -- the IM 1 handler (entered with interrupts off).
+; Registers clobbered: none.
+__CPC_ISR:
+	    push af
+	    ld   a, (IN_FW)
+	    or   a
+	    jr   nz, __CPC_ISR_DIRECT
+	    inc  a
+	    ld   (IN_FW), a         ; an interrupt during the chain goes direct
+	    push bc
+	    push de
+	    push hl
+	    push ix                 ; event routines may use IX/IY
+	    push iy
+	    ex   af, af'
+	    push af                 ; the program's AF'
+	    exx
+	    push bc                 ; the program's BC', DE', HL'
+	    push de
+	    push hl
+	    ld   bc, (FW_BC)        ; the firmware's BC'
+	    exx
+	    or   a                  ; AF' (active now) carry clear
+	    ex   af, af'
+	    call __CPC_ISR_ORIG     ; returns with interrupts on
+	    di
+	    exx
+	    ld   (FW_BC), bc        ; keep a ROM/mode change
+	    pop  hl
+	    pop  de
+	    pop  bc
+	    exx
+	    pop  af
+	    ex   af, af'            ; the program's AF' back
+	    pop  iy
+	    pop  ix
+	    pop  hl
+	    pop  de
+	    pop  bc
+	    xor  a
+	    ld   (IN_FW), a
+	    pop  af
+	    ei
+	    ret
+__CPC_ISR_DIRECT:
+	    pop  af
+__CPC_ISR_ORIG:
+	    jp   $FFFF              ; patched by __CPC_ISR_INSTALL
+	    pop namespace
+#line 32 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/colour.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC -- Spectrum colours to pens, and the per-mode screen
@@ -741,12 +841,13 @@ __INK_TO_PEN:
 	    pop  hl
 	    ret
 	    pop namespace
-#line 32 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 33 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    push namespace core
 	; CPC_INIT_00_BOOTSTRAP -- captures FW_BC, zero-fills the private
 	; runtime block ($9E00-$A1FF, .core.CPC_PRIV_BASE for
-	; .core.CPC_PRIV_SIZE bytes), sets the few sysvars that need a
-	; non-zero default, then sets screen MODE 1 through the firmware gate.
+	; .core.CPC_PRIV_SIZE bytes), installs the interrupt front-end, sets the
+	; few sysvars that need a non-zero default, then sets screen MODE 1
+	; through the firmware gate (which turns interrupts on for good).
 	;
 	; FW_BC is captured first, before the zero-fill, but can't be written
 	; to its sysvar slot yet -- that slot is about to be zeroed along with
@@ -776,6 +877,10 @@ CPC_INIT_00_BOOTSTRAP:
 	    ; IN_FW stays 0, which the zero-fill already set.
 	    pop  bc
 	    ld   (FW_BC), bc
+	    ; Our interrupt front-end (isr.asm) goes in before anything enables
+    ; interrupts: the first firmware call below returns with them on,
+	    ; and they stay on from then on.
+	    call __CPC_ISR_INSTALL
     ; ERR_NR: -1 means "no error", not 0 (matches the ZX Spectrum manual's
 	    ; convention).
 	    ld   a, $FF
@@ -854,12 +959,13 @@ __CPC_WAIT_KEY:
 ; Firmware entries called: MC_PRINT_CHAR (&BD2B) in printer-echo builds;
 ; KM_READ_CHAR/KM_WAIT_KEY otherwise. Registers clobbered: none (never
 	; returns).
-#line 164 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 171 "src/lib/arch/cpc/runtime/bootstrap.asm"
 __CPC_END:
-#line 190 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 198 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    call __CPC_WAIT_KEY
+	    di
 	    rst  0
-#line 193 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 202 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    pop namespace
 #line 36 "src/lib/arch/cpc/runtime/error.asm"
 	    push namespace core
@@ -896,10 +1002,10 @@ __ERR_STR: DEFB "Error ", 0
 	; a real keypress -- so the wait below is for a new key, not a stale
 	; one. Verified end to end in the emulator (cpc-port-notes.md Phase 2
 ; results): "Error n" prints, the machine sits at KM_WAIT_KEY, and a
-	; keypress resets it to BASIC's Ready prompt. Interrupts are enabled
-	; only inside each gate call, which is what lets the firmware's own
-	; key-scan interrupt handler fill in the keypress while we're blocked
-	; inside KM_WAIT_KEY.
+	; keypress resets it to BASIC's Ready prompt. The firmware's own
+	; key-scan interrupt handler fills in the keypress while we're blocked
+	; inside KM_WAIT_KEY. Interrupts go off just before the reset, so our
+	; &0038 vector (isr.asm) is never used while the firmware rebuilds it.
 ; Registers clobbered: none (never returns).
 __ERROR:
 	    PROC
@@ -931,11 +1037,12 @@ __ERROR_MSG_LOOP:
 __ERROR_MSG_DONE:
 	    ld   a, c
 	    call __PRINT_DECIMAL_A
-#line 148 "src/lib/arch/cpc/runtime/error.asm"
+#line 149 "src/lib/arch/cpc/runtime/error.asm"
 	    ; Flush stale keys, then wait for a real one (bootstrap.asm).
 	    call __CPC_WAIT_KEY
+	    di
 	    rst  0              ; reset to BASIC's Ready prompt
-#line 153 "src/lib/arch/cpc/runtime/error.asm"
+#line 155 "src/lib/arch/cpc/runtime/error.asm"
 	    ENDP
 	; Sets the error system variable, but keeps running.
 	; Usually this instruction if followed by the END intermediate instruction.
@@ -983,7 +1090,7 @@ __PDA_DONE:
 	    add  a, '0'
 	    call .core.__FW_CALL
 	    defw $BB5A
-#line 211 "src/lib/arch/cpc/runtime/error.asm"
+#line 213 "src/lib/arch/cpc/runtime/error.asm"
 __PDA_SKIP:
 	    ld   a, e             ; remainder becomes the input for the next digit
 	    ret

@@ -258,9 +258,10 @@ __CFR_NEXT:
     ENDP
 
 ; __CB_CLEAR -- A = byte -> fills the whole 16 KB drawing screen with
-; it, using the stack pointer as a fast fill pointer (8192 PUSHes, 11
-; T-states per 2 bytes, about 22 ms). Interrupts are off in compiled
-; code, so nothing can use the stack while it points into the screen.
+; it, using the stack pointer as a fast fill pointer: 256 chunks of 32
+; PUSHes (64 bytes), each with interrupts off and the real SP back
+; before they go on again, so the interrupt handler always finds a
+; proper stack (about 25 ms in all). Returns with interrupts on.
 ; Firmware entry called: none.
 ; Registers clobbered: AF, BC, DE, HL.
 __CB_CLEAR:
@@ -271,9 +272,10 @@ __CB_CLEAR:
     add  a, $40             ; end of the screen (&0000 for &C000)
     ld   h, a
     ld   l, 0
-    ld   sp, hl
-    ld   b, 0               ; 256 passes of 32 PUSHes = 16384 bytes
+    ld   b, 0               ; 256 chunks of 64 bytes = 16384 bytes
 __CCL_LOOP:
+    di
+    ld   sp, hl
     push de
     push de
     push de
@@ -306,8 +308,11 @@ __CCL_LOOP:
     push de
     push de
     push de
-    djnz __CCL_LOOP
+    ld   hl, 0
+    add  hl, sp             ; HL = where the next chunk ends
     ld   sp, (__CBF_SP)
+    ei
+    djnz __CCL_LOOP
     ret
 
     pop namespace

@@ -5,10 +5,14 @@
 ; B' = &7F (gate array port) and C' = current ROM/mode config, and the
 ; 300 Hz interrupt handler also uses BC' and branches on AF' carry
 ; ("already inside an interrupt"). Compiled code clobbers both freely
-; (SUB epilogues pop into BC'; div8/div16/float pushes use AF') and runs
-; with interrupts off. So every firmware call goes through this gate: it
-; restores BC' from the FW_BC shadow, clears AF' carry, enables
-; interrupts only for the call, then captures BC' back (mode/ROM changes).
+; (SUB epilogues pop into BC'; div8/div16/float pushes use AF'). So every
+; firmware call goes through this gate: with interrupts off it sets IN_FW,
+; restores BC' from the FW_BC shadow and clears AF' carry, makes the call
+; with interrupts on, then (off again) captures BC' back (mode/ROM
+; changes) and clears IN_FW. Outside the gate interrupts go through
+; isr.asm, which does the same register hand-over for the firmware's
+; interrupt handler; IN_FW tells it the firmware's registers are already
+; loaded. The gate always returns with interrupts on.
 ;
 ; Usage (A, F, BC, DE, HL go in as set and come back as the firmware left
 ; them, flags included):
@@ -17,8 +21,8 @@
 ;     defw $BB5A                  ; which corrupt IX (Boriel's frame pointer)
 ;
 ; Clobbers BC', DE', HL', AF' (never meaningful to compiled code across a
-; call). Not re-entrant: fine, only ROM code runs while interrupts are on.
-; Cost: about 210 T-states plus the firmware routine.
+; call). Not re-entrant (the interrupt handler never calls it).
+; Cost: about 220 T-states plus the firmware routine.
 
 #include once <sysvars.asm>
 
@@ -26,6 +30,7 @@
 
 __FW_CALL:
     PROC
+    di                  ; IN_FW and BC' must change together (isr.asm)
     exx                 ; alternate bank is scratch; caller's regs stay put
     pop  hl             ; HL -> defw after the call
     ld   e, (hl)
@@ -50,11 +55,13 @@ __FW_CALL_TARGET:
     ld   hl, IN_FW
     ld   (hl), 0
     exx
+    ei
     ret
     ENDP
 
 __FW_CALL_IX:
     PROC
+    di
     exx
     pop  hl
     ld   e, (hl)
@@ -81,6 +88,7 @@ __FW_CALL_IX_TARGET:
     ld   hl, IN_FW
     ld   (hl), 0
     exx
+    ei
     ret
     ENDP
 

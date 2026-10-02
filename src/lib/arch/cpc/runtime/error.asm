@@ -96,10 +96,10 @@ __EPE_DONE:
 ; a real keypress -- so the wait below is for a new key, not a stale
 ; one. Verified end to end in the emulator (cpc-port-notes.md Phase 2
 ; results): "Error n" prints, the machine sits at KM_WAIT_KEY, and a
-; keypress resets it to BASIC's Ready prompt. Interrupts are enabled
-; only inside each gate call, which is what lets the firmware's own
-; key-scan interrupt handler fill in the keypress while we're blocked
-; inside KM_WAIT_KEY.
+; keypress resets it to BASIC's Ready prompt. The firmware's own
+; key-scan interrupt handler fills in the keypress while we're blocked
+; inside KM_WAIT_KEY. Interrupts go off just before the reset, so our
+; &0038 vector (isr.asm) is never used while the firmware rebuilds it.
 ; Registers clobbered: none (never returns).
 __ERROR:
     PROC
@@ -143,11 +143,13 @@ __ERROR_MSG_DONE:
 #ifdef __CPC_PRINTER_ECHO__
     ; Echo mode: a failing test still has to reach END, so don't block
     ; on a keypress here (see the file header) -- straight to reset.
+    di
     rst  0
 #else
     ; Flush stale keys, then wait for a real one (bootstrap.asm).
     call __CPC_WAIT_KEY
 
+    di
     rst  0              ; reset to BASIC's Ready prompt
 #endif
 

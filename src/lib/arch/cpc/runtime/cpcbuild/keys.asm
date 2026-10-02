@@ -20,8 +20,9 @@
     push namespace core
 
 ; __CB_SCAN_KEYS -- reads the 10 rows into CB_KEYS, straight from the
-; hardware, with interrupts as they are (off in compiled code, so the
-; firmware's own keyboard scan cannot interleave with this one).
+; hardware, with interrupts off so the firmware's own keyboard scan (in
+; its interrupt handler) cannot interleave with this one; returns with
+; interrupts on.
 ;
 ; Afterwards the PPI is as the firmware leaves it: control word &82
 ; (port A output, B input, C output), port C = the cassette bits it had
@@ -36,6 +37,7 @@ __CB_SCAN_KEYS:
     PROC
     LOCAL __CSK_LOOP
 
+    di
     ld   b, $F6
     in   a, (c)             ; port C: keep the cassette bits (4, 5)
     and  $30
@@ -68,6 +70,7 @@ __CSK_LOOP:
     out  (c), c             ; port A back to output (clears the latches)
     ld   b, $F6
     out  (c), d             ; cassette bits back, AY inactive, row 0
+    ei
     ret
     ENDP
 
