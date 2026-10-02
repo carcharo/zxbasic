@@ -18,31 +18,205 @@
 ; shadow registers. Cells off the screen draw nothing.
 
 #include once <cpcbuild/core.asm>
+#include once <cpcbuild/nowrap.asm>
 
     push namespace core
 
 ; __CB_TILE_PTR -- HL = tile number (0-1023) -> DE = its data address.
 ; Firmware entry called: none.
-; Registers clobbered: AF, B, DE, HL.
+; Registers clobbered: AF, DE, HL.
 __CB_TILE_PTR:
+    PROC
+    LOCAL __CTP_DONE
+
+    add  hl, hl
+    add  hl, hl
+    add  hl, hl             ; * 8
     ld   a, (GFX_XSHIFT)
-    add  a, 3
-    ld   b, a
-__CTP_LOOP:
-    add  hl, hl             ; * 8 * W
-    djnz __CTP_LOOP
+    or   a
+    jr   z, __CTP_DONE
+    add  hl, hl             ; * 16 (mode 1)
+    dec  a
+    jr   z, __CTP_DONE
+    add  hl, hl             ; * 32 (mode 0)
+__CTP_DONE:
     ld   de, (CB_TILESET)
     add  hl, de
     ex   de, hl
     ret
+    ENDP
+
+; Unrolled tile drawers, one per width W (4, 2, 1 bytes). The tile's 8 rows
+; are copied with LDI chains; the screen address is stepped to the next
+; row (+2 KB) between rows through HL (ADD HL,BC), so no page-crossing
+; care is needed. The caller guarantees no row wraps in its 2 KB block.
+; __CTD_Gn: HL = the tile's data, DE = its screen address (on pixel line 0
+; of a character row). On return DE = screen address + 7 * 2 KB + W (so
+; the tile's address plus W is D - $38) and HL = the data after the tile.
+; __CTD_Un: HL = screen address, DE = data (swaps, then as Gn).
+; Firmware entry called: none. Registers clobbered: AF, BC, DE, HL.
+__CTD_U4:
+    ex   de, hl
+__CTD_G4:
+    ldi
+    ldi
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 4
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 4
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 4
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 4
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 4
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 4
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 4
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ldi
+    ldi
+    ret
+__CTD_U2:
+    ex   de, hl
+__CTD_G2:
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 2
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 2
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 2
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 2
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 2
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 2
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 2
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ldi
+    ret
+__CTD_U1:
+    ex   de, hl
+__CTD_G1:
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 1
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 1
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 1
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 1
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 1
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 1
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ex   de, hl
+    ld   bc, $800 - 1
+    add  hl, bc
+    ex   de, hl
+    ldi
+    ret
 
 ; __CB_TILE_DRAW -- HL = screen address of the tile's first byte (on
 ; pixel line 0 of a character row), DE = its data -> draws the tile.
+; The row-wrap test is only needed in the last 256 bytes of a block; a
+; tile that can't wrap goes to the unrolled drawer for the mode.
 ; Firmware entry called: none.
 ; Registers clobbered: AF, BC, DE, HL.
 __CB_TILE_DRAW:
     PROC
-    LOCAL __CTD_FAST, __CTD_F1, __CTD_F2, __CTD_F4
+    LOCAL __CTD_FAST, __CTD_F1, __CTD_F2
     LOCAL __CTD_L4, __CTD_SLOW, __CTD_SL, __CTD_SI, __CTD_W
 
     ld   a, h
@@ -64,58 +238,15 @@ __CTD_W:                    ; C = width in bytes
     jr   c, __CTD_SLOW
 __CTD_FAST:
     ld   a, (GFX_XSHIFT)
-    ld   b, 8
     or   a
     jr   z, __CTD_F1
     dec  a
     jr   z, __CTD_F2
-__CTD_F4:
-    ld   a, (de)
-    ld   (hl), a
-    inc  de
-    inc  hl
-    ld   a, (de)
-    ld   (hl), a
-    inc  de
-    inc  hl
-    ld   a, (de)
-    ld   (hl), a
-    inc  de
-    inc  hl
-    ld   a, (de)
-    ld   (hl), a
-    inc  de
-    dec  hl
-    dec  hl
-    dec  hl
-    ld   a, h
-    add  a, 8
-    ld   h, a
-    djnz __CTD_F4
-    ret
+    jp   __CTD_U4
 __CTD_F2:
-    ld   a, (de)
-    ld   (hl), a
-    inc  de
-    inc  hl
-    ld   a, (de)
-    ld   (hl), a
-    inc  de
-    dec  hl
-    ld   a, h
-    add  a, 8
-    ld   h, a
-    djnz __CTD_F2
-    ret
+    jp   __CTD_U2
 __CTD_F1:
-    ld   a, (de)
-    ld   (hl), a
-    inc  de
-    ld   a, h
-    add  a, 8
-    ld   h, a
-    djnz __CTD_F1
-    ret
+    jp   __CTD_U1
 __CTD_SLOW:                 ; C = width; per-byte, wrapping in the block
     ld   b, 8
 __CTD_SI:
@@ -139,50 +270,108 @@ __CTD_L4:
 
 ; __CB_TILE_AT -- C = cell x, B = cell y, HL = tile number (0-1023):
 ; draws it, or nothing if the cell is off the screen (x * W >= 80 or
-; y >= 25).
+; y >= 25). One branch per mode, each with its own shifts (data address =
+; TILESET + n * 8 W, byte column = W x) and straight to its unrolled
+; drawer unless the tile is in the last 256 bytes of the block (where it
+; could wrap: __CB_TILE_DRAW does the checking).
 ; Firmware entry called: none.
 ; Registers clobbered: AF, BC, DE, HL.
 __CB_TILE_AT:
     PROC
-    LOCAL __CTA_LIM, __CTA_LIMD, __CTA_SH, __CTA_SHD, __CTA_OFF
+    LOCAL __CTA_M1, __CTA_M2
 
-    push hl
-    ld   a, (GFX_XSHIFT)
-    ld   d, a
-    ld   a, 80
-__CTA_LIM:                  ; A = 80 >> shift = cells per row
-    dec  d
-    jp   m, __CTA_LIMD
-    srl  a
-    jr   __CTA_LIM
-__CTA_LIMD:
-    cp   c
-    jr   z, __CTA_OFF
-    jr   c, __CTA_OFF       ; limit <= x
     ld   a, b
     cp   25
-    jr   nc, __CTA_OFF
-    add  a, a
-    add  a, a
-    add  a, a
-    ld   b, a               ; line = cell y * 8
+    ret  nc                 ; below the screen
     ld   a, (GFX_XSHIFT)
-    ld   d, a
-__CTA_SH:
-    dec  d
-    jp   m, __CTA_SHD
-    sla  c                  ; byte column = cell x * W
-    jr   __CTA_SH
-__CTA_SHD:
-    call __CB_ADDR          ; HL = screen address
-    ex   (sp), hl           ; HL = tile number, stack = address
-    call __CB_TILE_PTR
-    pop  hl
+    or   a
+    jr   z, __CTA_M2
+    dec  a
+    jr   z, __CTA_M1
+    ld   a, c               ; mode 0: 20 cells of 4 bytes
+    cp   20
+    ret  nc
+    add  a, a
+    add  a, a
+    ld   c, a               ; C = byte column
+    add  hl, hl
+    add  hl, hl
+    add  hl, hl
+    add  hl, hl
+    add  hl, hl             ; * 32
+    ld   de, (CB_TILESET)
+    add  hl, de
+    ex   de, hl             ; DE = the tile's data
+    call __CB_CELL_ADDR     ; HL = its screen address
+    ld   a, h
+    and  $07
+    cp   $07
+    jp   nz, __CTD_U4
     jp   __CB_TILE_DRAW
-__CTA_OFF:
-    pop  hl
-    ret
+__CTA_M1:
+    ld   a, c               ; mode 1: 40 cells of 2 bytes
+    cp   40
+    ret  nc
+    add  a, a
+    ld   c, a
+    add  hl, hl
+    add  hl, hl
+    add  hl, hl
+    add  hl, hl             ; * 16
+    ld   de, (CB_TILESET)
+    add  hl, de
+    ex   de, hl
+    call __CB_CELL_ADDR
+    ld   a, h
+    and  $07
+    cp   $07
+    jp   nz, __CTD_U2
+    jp   __CB_TILE_DRAW
+__CTA_M2:
+    ld   a, c               ; mode 2: 80 cells of 1 byte
+    cp   80
+    ret  nc
+    add  hl, hl
+    add  hl, hl
+    add  hl, hl             ; * 8
+    ld   de, (CB_TILESET)
+    add  hl, de
+    ex   de, hl
+    call __CB_CELL_ADDR
+    ld   a, h
+    and  $07
+    cp   $07
+    jp   nz, __CTD_U1
+    jp   __CB_TILE_DRAW
     ENDP
+
+; __CB_CELL_ADDR -- B = cell y (0-24), C = byte column (0-79) -> HL = the
+; address of that byte on pixel line 0 of the character row, i.e. in
+; block 0: BASE | ((OFFSET + 80 y + x) AND &7FF), with 5 y as a byte and
+; 80 y as 16 times that. DE is preserved.
+; Firmware entry called: none. Registers clobbered: AF, BC, HL.
+__CB_CELL_ADDR:
+    ld   a, b
+    add  a, a
+    add  a, a
+    add  a, b               ; 5 y (at most 120)
+    ld   l, a
+    ld   h, 0
+    add  hl, hl
+    add  hl, hl
+    add  hl, hl
+    add  hl, hl             ; 80 y
+    ld   b, 0
+    add  hl, bc             ; + byte column
+    ld   bc, (CB_OFFSET)
+    add  hl, bc             ; + scroll offset
+    ld   a, h
+    and  $07                ; wrap within the 2 KB block
+    ld   h, a
+    ld   a, (CB_BASE)
+    or   h
+    ld   h, a
+    ret
 
 ; __CB_TILE16 -- C = x, B = y, A = tile: a 16x16 tile at 16x16 cell
 ; (x, y), drawn as the 8x8 tiles 4*tile .. 4*tile+3 (top-left,
@@ -231,15 +420,20 @@ __CB_TILE16:
 ; y, E = cell x, B = height, C = width (in tiles; the map is C bytes per
 ; row): draws the block of 8x8 tiles with its top-left at cell (x, y),
 ; skipping cells off the screen. Per row the first address comes from
-; __CB_ADDR, then each tile's is the previous plus W, wrapped at the
-; block end by clearing bit 3 of H (valid because a tile starts in
-; block 0, so a carry out of the block is the only way that bit gets set).
+; __CB_ADDR, then each tile's is the previous plus W. Two row loops:
+; when no row of the screen can wrap in its block (__CB_NOWRAP) the fast
+; one (__CTM_F4/F2/F1, one per mode, see below) draws each tile with the
+; unrolled drawer and no wrap handling; otherwise the general one wraps
+; at the block end by clearing bit 3 of H (valid because a tile starts in
+; block 0, so a carry out of the block is the only way that bit gets set)
+; and draws through __CB_TILE_DRAW, which checks the tile for a wrap.
 ; Firmware entry called: none.
 ; Registers clobbered: AF, BC, DE, HL.
 __CB_TILEMAP:
     PROC
     LOCAL __CTM_LIM, __CTM_LIMD, __CTM_SH, __CTM_SHD, __CTM_ROW
-    LOCAL __CTM_TILE, __CTM_V1, __CTM_R1
+    LOCAL __CTM_TILE, __CTM_V1, __CTM_R1, __CTM_FROW, __CTM_RS, __CTM_RD
+    LOCAL __CTM_FM2, __CTM_FM1, __CTM_FNEXT, __CTM_TAIL
 
     ld   (__CTM_ROWMAP), hl
     ld   a, c
@@ -294,7 +488,25 @@ __CTM_SHD:
     ld   (__CTM_XB), a
     ld   d, 0
     ld   (__CTM_WB), de
+    ld   a, (GFX_XSHIFT)    ; run length in bytes = visible tiles * W
+    ld   b, a
+    ld   a, (__CTM_VIS)
+    inc  b
+__CTM_RS:
+    dec  b
+    jr   z, __CTM_RD
+    add  a, a
+    jr   __CTM_RS
+__CTM_RD:
+    ld   (__CTM_RUNB), a
+    call __CB_NOWRAP        ; Carry set: no row can wrap
+    ld   a, 0
+    adc  a, 0
+    ld   (__CTM_FAST), a
 __CTM_ROW:
+    ld   a, (__CTM_FAST)
+    or   a
+    jr   nz, __CTM_FROW
     ld   a, (__CTM_Y)
     add  a, a
     add  a, a
@@ -327,6 +539,7 @@ __CTM_TILE:
     dec  a
     ld   (__CTM_CNT), a
     jr   nz, __CTM_TILE
+__CTM_TAIL:
     ld   a, (__CTM_W)
     ld   e, a
     ld   d, 0
@@ -341,7 +554,117 @@ __CTM_TILE:
     ld   (__CTM_ROWS), a
     jr   nz, __CTM_ROW
     ret
+__CTM_FROW:                 ; fast row: the whole run of tiles
+    ld   a, (__CTM_Y)
+    add  a, a
+    add  a, a
+    add  a, a
+    ld   b, a
+    ld   a, (__CTM_XB)
+    ld   c, a
+    call __CB_ADDR
+    ex   de, hl             ; DE = address of the first tile
+    ld   a, (__CTM_RUNB)
+    add  a, e
+    ld   (__CTM_END), a     ; the low byte the run ends at
+    ld   hl, (__CTM_ROWMAP)
+    ld   a, (GFX_XSHIFT)
+    or   a
+    jr   z, __CTM_FM1
+    dec  a
+    jr   z, __CTM_FM2
+    call __CTM_F4
+    jr   __CTM_FNEXT
+__CTM_FM2:
+    call __CTM_F2
+    jr   __CTM_FNEXT
+__CTM_FM1:
+    call __CTM_F1
+__CTM_FNEXT:
+    jp   __CTM_TAIL
     ENDP
+
+; The fast row loops, one per width W = 4, 2, 1 (modes 0, 1, 2): HL = the
+; map row, DE = screen address of the first tile; draws tiles until the
+; screen address' low byte reaches __CTM_END (the run is at most 80 bytes,
+; so the low byte is unambiguous). Per tile: its data address is
+; TILESET + n * 8 W (the shift by 3 + log2 W is done by rotating the
+; byte, which is shorter than shifting a pair); the drawer leaves DE at
+; the tile's address + 7 * 2 KB + W, so the next tile's address is DE - 7 * 2 KB.
+; Firmware entry called: none. Registers clobbered: AF, BC, DE, HL.
+__CTM_F4:
+    ld   a, (hl)
+    inc  hl
+    push hl
+    rrca
+    rrca
+    rrca                    ; n * 32 as a pair: high = n >> 3, low = n << 5
+    ld   l, a
+    and  $1F
+    ld   h, a
+    ld   a, l
+    and  $E0
+    ld   l, a
+    ld   bc, (CB_TILESET)
+    add  hl, bc
+    call __CTD_G4
+    ld   a, d
+    sub  $38
+    ld   d, a
+    pop  hl
+    ld   a, (__CTM_END)
+    cp   e
+    jr   nz, __CTM_F4
+    ret
+__CTM_F2:
+    ld   a, (hl)
+    inc  hl
+    push hl
+    rrca
+    rrca
+    rrca
+    rrca                    ; n * 16: high = n >> 4, low = n << 4
+    ld   l, a
+    and  $0F
+    ld   h, a
+    ld   a, l
+    and  $F0
+    ld   l, a
+    ld   bc, (CB_TILESET)
+    add  hl, bc
+    call __CTD_G2
+    ld   a, d
+    sub  $38
+    ld   d, a
+    pop  hl
+    ld   a, (__CTM_END)
+    cp   e
+    jr   nz, __CTM_F2
+    ret
+__CTM_F1:
+    ld   a, (hl)
+    inc  hl
+    push hl
+    rlca
+    rlca
+    rlca                    ; n * 8: high = n >> 5, low = n << 3
+    ld   l, a
+    and  $07
+    ld   h, a
+    ld   a, l
+    and  $F8
+    ld   l, a
+    ld   bc, (CB_TILESET)
+    add  hl, bc
+    call __CTD_G1
+    ld   a, d
+    sub  $38
+    ld   d, a
+    pop  hl
+    ld   a, (__CTM_END)
+    cp   e
+    jr   nz, __CTM_F1
+    ret
 
 ; Working storage of __CB_TILEMAP (never executed; in the code stream).
 __CTM_ROWMAP:  defw 0
@@ -353,5 +676,8 @@ __CTM_CNT:     defb 0
 __CTM_Y:       defb 0
 __CTM_ROWS:    defb 0
 __CTM_XB:      defb 0
+__CTM_RUNB:    defb 0
+__CTM_END:     defb 0
+__CTM_FAST:    defb 0
 
     pop namespace
