@@ -25,21 +25,10 @@
 ; is saved across the gate call explicitly and only relied on again
 ; after it returns.
 ;
-; Reliability: the firmware only updates its debounced key-state table
-; from its own 300 Hz interrupt handler (see fwcall.asm's header), and
-; interrupts are enabled only for the duration of a gate call (the `ei`
-; ... `di` bracket in __FW_CALL). So ESC is only "seen" if a firmware
-; interrupt happens to land inside one of those brief windows. With
-; --enable-break, CHECK_BREAK itself runs once per source line and makes
-; one such window every line via this very KM_TEST_KEY call (plus
-; whatever other gate calls -- PRINT, INK, etc. -- the line also makes),
-; so in any loop that executes more than a handful of lines within one
-; interrupt period (~3.3 ms at 4 MHz), the windows sweep across the
-; interrupt's own timing and one of them lands inside it. A human holding
-; ESC down (tens of milliseconds) is therefore seen reliably, typically
-; within a handful of loop iterations -- not on the very first
-; CHECK_BREAK call, and not in a program with only one or two lines
-; total and no loop.
+; Reliability: the firmware updates its debounced key-state table from
+; its own 300 Hz interrupt handler, which runs all the time (isr.asm,
+; Phase 4d), so a held ESC is seen at the first CHECK_BREAK after the
+; firmware's next keyboard scan (every 20 ms).
 
 #include once <error.asm>
 #include once <fwcall.asm>
