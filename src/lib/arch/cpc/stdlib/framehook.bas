@@ -24,6 +24,14 @@
 ' Firmware calls themselves still work. Switch it off (GameMode(0))
 ' before relying on those again.
 '
+' Bare-metal mode (-D CPC_BAREMETAL): the program never uses the firmware,
+' so every interrupt already goes to the frame detector, which counts the
+' frames and runs the hook: bare mode is permanently "game mode".
+' GameMode() is accepted and has no effect (it only sets the vector that
+' selects the game-mode handler, which the bare interrupt handler ignores).
+' FrameHook, FrameHookOff and Frames work as above; there is no firmware
+' clock, key buffer, sound queue or ink refresh to stop.
+'
 ' See runtime/framehook.asm. Written for this project (MIT).
 ' ----------------------------------------------------------------
 

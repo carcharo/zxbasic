@@ -22,10 +22,65 @@
 
 #include once <fwcall.asm>
 #include once <sysvars.asm>
+#ifdef CPC_BAREMETAL
+#include once <txtbare.asm>
+#endif
 
 ; Printing positioning library.
     push namespace core
 
+#ifdef CPC_BAREMETAL
+; Bare-metal mode: the cursor lives in S_POSN (txtbare.asm): low byte =
+; column (TXT_COLS = a wrap pending), high byte = row. Same register
+; convention as the firmware version below.
+;
+; Reads the cursor into D = row, E = column (both 0-based). A pending wrap
+; (column = TXT_COLS) is folded forward to column 0 of the next row, clamped
+; at the last row, as in the firmware version.
+; Registers clobbered: DE only (AF is preserved).
+__LOAD_S_POSN:
+    PROC
+    LOCAL __LSP_DONE, __LSP_SET
+    push af
+    ld   de, (S_POSN)
+    ld   a, (TXT_COLS)
+    cp   e
+    jr   nz, __LSP_DONE
+    ld   e, 0
+    ld   a, d
+    inc  a
+    cp   SCR_ROWS
+    jr   c, __LSP_SET
+    ld   a, SCR_ROWS - 1
+__LSP_SET:
+    ld   d, a
+__LSP_DONE:
+    pop  af
+    ret
+    ENDP
+
+; Sets the cursor from D = row, E = column (both 0-based). Out-of-range
+; values are clamped to the screen (the firmware does the same to its
+; window), so drawing can never leave screen memory.
+; Registers clobbered: AF, HL.
+__SAVE_S_POSN:
+    PROC
+    LOCAL __SSP_COL, __SSP_ROW
+    ld   a, (TXT_COLS)
+    dec  a
+    cp   e
+    jr   nc, __SSP_COL
+    ld   e, a
+__SSP_COL:
+    ld   a, d
+    cp   SCR_ROWS
+    jr   c, __SSP_ROW
+    ld   d, SCR_ROWS - 1
+__SSP_ROW:
+    ld   (S_POSN), de
+    ret
+    ENDP
+#else
 ; Reads the firmware's cursor into D = row, E = column (both 0-based).
 ;
 ; Firmware entry called (via the gate): TXT_GET_CURSOR (&BB78). Per the
@@ -102,5 +157,7 @@ __SAVE_S_POSN:
 
     ret
     ENDP
+
+#endif
 
     pop namespace

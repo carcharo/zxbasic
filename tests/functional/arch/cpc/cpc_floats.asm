@@ -302,6 +302,22 @@ _s:
 	FH_FRAMES           EQU SYSVAR_BASE + $E5   ; 4B -- frames counted (framehook.asm)
 	GM_COUNT            EQU SYSVAR_BASE + $E9   ; DB -- interrupts since last frame (game mode)
 	FH_BLOCK            EQU SYSVAR_BASE + $EA   ; 9B -- frame-flyback event block (framehook.asm)
+; --- Bare-metal text (txtbare.asm, Phase 6 B2): $100-$13F and $200-$21F,
+	; clear of the sysvars above so parallel additions there cannot collide.
+	; PAL_SHADOW reuses the 17 free bytes at $C0 (bare mode keeps no firmware
+	; ink table, so BORDER reads the pen colours from here).
+	PAL_SHADOW          EQU SYSVAR_BASE + $C0   ; 17B -- colour (0-26) of pens 0-15 and the border
+	BT_MODE             EQU SYSVAR_BASE + $100  ; DB -- current screen mode 0-3
+	BT_BPC              EQU SYSVAR_BASE + $101  ; DB -- screen bytes per glyph row (4/2/1)
+	BT_PPB              EQU SYSVAR_BASE + $102  ; DB -- pixels per screen byte (2/4/8)
+	BT_MASK             EQU SYSVAR_BASE + $103  ; DB -- pen number mask (15/3/1)
+	BT_FILL             EQU SYSVAR_BASE + $104  ; DB -- screen byte of an all-paper row (scroll fill)
+BT_MX               EQU SYSVAR_BASE + $105  ; DB -- mode 2: ink mask xor paper mask
+BT_MP               EQU SYSVAR_BASE + $106  ; DB -- mode 2: paper mask
+	BT_BUF              EQU SYSVAR_BASE + $108  ; 8B -- SCREEN$ glyph bitmap being matched
+	BT_TRAMP            EQU SYSVAR_BASE + $120  ; 32B -- font copy routine (runs with the lower ROM in)
+	BT_PIX              EQU SYSVAR_BASE + $140  ; 64B -- SCREEN$ cell pixels (pen numbers)
+	BT_TBL              EQU SYSVAR_BASE + $200  ; 16B, page aligned -- screen byte per glyph-bit group
 	CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
@@ -803,6 +819,7 @@ __CPC_END:
 	    pop namespace
 #line 210 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 36 "src/lib/arch/cpc/runtime/error.asm"
+#line 39 "src/lib/arch/cpc/runtime/error.asm"
 	    push namespace core
 	; Error code definitions (as in ZX spectrum manual)
 ; Set error code with:
@@ -821,8 +838,8 @@ __CPC_END:
 	ERROR_BreakIntoProgram  EQU    20
 	ERROR_TapeLoadingErr    EQU    26
 __ERR_STR: DEFB "Error ", 0
-#line 84 "src/lib/arch/cpc/runtime/error.asm"
-#line 85 "src/lib/arch/cpc/runtime/error.asm"
+#line 87 "src/lib/arch/cpc/runtime/error.asm"
+#line 88 "src/lib/arch/cpc/runtime/error.asm"
 ; Raises a runtime error: stores the code, prints "Error n" on a fresh
 	; line, waits for a keypress, then resets to BASIC's Ready prompt (END's
 	; own reset, generic.py's _end -- see cpc-port-notes.md Sec6.5).
@@ -847,7 +864,7 @@ __ERR_STR: DEFB "Error ", 0
 	; screen and, under -D __CPC_PRINTER_ECHO__, the printer. Both preserve
 	; BC, DE, HL (the callers keep the error number and digits there).
 	; __ERR_RESET -- the machine reset after an error.
-#line 129 "src/lib/arch/cpc/runtime/error.asm"
+#line 145 "src/lib/arch/cpc/runtime/error.asm"
 ; Firmware: TXT_OUTPUT (&BB5A, preserves every register) through the gate.
 __ERR_SCR:
 	    call .core.__FW_CALL
@@ -856,12 +873,12 @@ __ERR_SCR:
 __ERR_OUT:
 	    call .core.__FW_CALL
 	    defw $BB5A
-#line 140 "src/lib/arch/cpc/runtime/error.asm"
+#line 156 "src/lib/arch/cpc/runtime/error.asm"
 	    ret
 __ERR_RESET:
 	    di
 	    rst  0
-#line 145 "src/lib/arch/cpc/runtime/error.asm"
+#line 161 "src/lib/arch/cpc/runtime/error.asm"
 __ERROR:
 	    PROC
 	    ld   (ERR_NR), a
@@ -887,11 +904,11 @@ __ERROR_MSG_LOOP:
 __ERROR_MSG_DONE:
 	    ld   a, c
 	    call __PRINT_DECIMAL_A
-#line 181 "src/lib/arch/cpc/runtime/error.asm"
+#line 197 "src/lib/arch/cpc/runtime/error.asm"
 	    ; Flush stale keys, then wait for a real one (bootstrap.asm).
 	    call __CPC_WAIT_KEY
 	    jp   __ERR_RESET    ; reset to BASIC's Ready prompt
-#line 185 "src/lib/arch/cpc/runtime/error.asm"
+#line 201 "src/lib/arch/cpc/runtime/error.asm"
 	    ENDP
 	; Sets the error system variable, but keeps running.
 	; Usually this instruction if followed by the END intermediate instruction.
@@ -2963,6 +2980,7 @@ __MULF:	; Multiplication
 	; doesn't depend on whether PRINT is used elsewhere (if it isn't, this
 	; file is never linked in at all), so the ___PRINT_IS_USED___ branch
 	; zx48k has is dropped.
+#line 25 "src/lib/arch/cpc/runtime/copy_attr.asm"
 	    push namespace core
 COPY_ATTR:
 	    ; Copies current permanent attribs into temporary attribs, then
@@ -2989,6 +3007,7 @@ __REFRESH_TMP:
 	    ld (hl), a
 	    ret
 	    ENDP
+#line 70 "src/lib/arch/cpc/runtime/copy_attr.asm"
 	; Applies ATTR_T's ink/paper (Spectrum colours, mapped to pens of the
 	; current mode by colour.asm's __INK_TO_PEN) and P_FLAG's temporary INVERSE bit
 	; (bit 2) to the firmware's current pen/paper. Always re-derives both
@@ -3025,6 +3044,7 @@ __SET_ATTR_MODE:
 __SAM_NOINV:
 	    ret
 	    ENDP
+#line 111 "src/lib/arch/cpc/runtime/copy_attr.asm"
 	    pop namespace
 #line 36 "tests/functional/arch/cpc/cpc_floats.bas"
 #line 1 "src/lib/arch/cpc/runtime/math/sin.asm"
@@ -3141,7 +3161,8 @@ SQRT: ; Computes SQRT(x) using ROM FP-CALC
 	; live registers, e.g. printstr.asm's string pointer/length), not on
 	; scratch. So the "which control code came next" state lives in a plain
 	; memory byte (PRINT_STATE, sysvars.asm) instead, and BC/HL are
-	; protected with an ordinary push/pop around the whole routine.
+	; protected with an ordinary push/pop around the whole routine (bare-metal
+; mode also keeps DE: the firmware's TXT_OUTPUT preserved it and callers use that).
 #line 1 "src/lib/arch/cpc/runtime/sposn.asm"
 	; Print cursor positioning, via the firmware's own live cursor
 	; (TXT_GET_CURSOR / TXT_SET_CURSOR) instead of the Spectrum VRAM/attribute
@@ -3164,8 +3185,10 @@ SQRT: ; Computes SQRT(x) using ROM FP-CALC
 	; cursor through A (TXT_GET_CURSOR returns the column/row in H/L, but
 	; getting them into D/E goes via A), so it preserves the caller's AF
 	; across the call explicitly instead of getting it for free.
+#line 28 "src/lib/arch/cpc/runtime/sposn.asm"
 	; Printing positioning library.
 	    push namespace core
+#line 84 "src/lib/arch/cpc/runtime/sposn.asm"
 	; Reads the firmware's cursor into D = row, E = column (both 0-based).
 	;
 ; Firmware entry called (via the gate): TXT_GET_CURSOR (&BB78). Per the
@@ -3231,8 +3254,9 @@ __SAVE_S_POSN:
 	    defw $BB75
 	    ret
 	    ENDP
+#line 162 "src/lib/arch/cpc/runtime/sposn.asm"
 	    pop namespace
-#line 81 "src/lib/arch/cpc/runtime/print.asm"
+#line 82 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/zx48k/runtime/table_jump.asm"
 	    push namespace core
 JUMP_HL_PLUS_2A: ; Does JP (HL + A*2) Modifies DE. Modifies A
@@ -3249,7 +3273,7 @@ JUMP_HL_PLUS_DE: ; Does JP (HL + DE)
 CALL_HL:
 	    jp (hl)
 	    pop namespace
-#line 84 "src/lib/arch/cpc/runtime/print.asm"
+#line 85 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/ink.asm"
 	; Sets ink color in ATTR_P permanently
 ; Parameter: Ink color in A register
@@ -3298,7 +3322,7 @@ INK_TMP:
 	    jp __SET_ATTR_MODE
 	    ENDP
 	    pop namespace
-#line 85 "src/lib/arch/cpc/runtime/print.asm"
+#line 86 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/paper.asm"
 	; Sets paper color in ATTR_P permanently
 ; Parameter: Paper color in A register
@@ -3344,7 +3368,7 @@ PAPER_TMP:
 	    jp __SET_ATTR_MODE
 	    ENDP
 	    pop namespace
-#line 86 "src/lib/arch/cpc/runtime/print.asm"
+#line 87 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/flash.asm"
 	; Sets flash flag in ATTR_P permanently
 ; Parameter: Paper color in A register
@@ -3385,7 +3409,7 @@ FLASH_TMP:
 	    jr __SET_FLASH
 	    ENDP
 	    pop namespace
-#line 87 "src/lib/arch/cpc/runtime/print.asm"
+#line 88 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/bright.asm"
 	; Sets bright flag in ATTR_P permanently
 ; Parameter: Paper color in A register
@@ -3426,7 +3450,7 @@ BRIGHT_TMP:
 	    jr __SET_BRIGHT
 	    ENDP
 	    pop namespace
-#line 88 "src/lib/arch/cpc/runtime/print.asm"
+#line 89 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/over.asm"
 	; Sets OVER flag in P_FLAG permanently
 ; Parameter: OVER flag in bit 0 of A register
@@ -3470,7 +3494,7 @@ OVER_TMP:
 	    jp __SET_ATTR_MODE
 	    ENDP
 	    pop namespace
-#line 89 "src/lib/arch/cpc/runtime/print.asm"
+#line 90 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/inverse.asm"
 	; Sets INVERSE flag in P_FLAG permanently
 ; Parameter: INVERSE flag in bit 0 of A register
@@ -3503,7 +3527,7 @@ INVERSE_TMP:
 	    jp __SET_ATTR_MODE
 	    ENDP
 	    pop namespace
-#line 90 "src/lib/arch/cpc/runtime/print.asm"
+#line 91 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/bold.asm"
 	; Sets BOLD flag in P_FLAG permanently
 ; Parameter: BOLD flag in bit 0 of A register
@@ -3534,7 +3558,7 @@ BOLD_TMP:
 	    ret
 	    ENDP
 	    pop namespace
-#line 91 "src/lib/arch/cpc/runtime/print.asm"
+#line 92 "src/lib/arch/cpc/runtime/print.asm"
 #line 1 "src/lib/arch/cpc/runtime/italic.asm"
 	; Sets ITALIC flag in P_FLAG permanently
 ; Parameter: ITALIC flag in bit 0 of A register
@@ -3567,9 +3591,10 @@ ITALIC_TMP:
 	    ret
 	    ENDP
 	    pop namespace
-#line 92 "src/lib/arch/cpc/runtime/print.asm"
+#line 93 "src/lib/arch/cpc/runtime/print.asm"
+#line 97 "src/lib/arch/cpc/runtime/print.asm"
 	    push namespace core
-#line 118 "src/lib/arch/cpc/runtime/print.asm"
+#line 136 "src/lib/arch/cpc/runtime/print.asm"
 ; __PRINTCHAR: prints the character/control code in A.
 	; Preserves BC and HL (printstr.asm's loop does `call __PRINTCHAR`
 	; then `inc hl` / `dec bc` with no push/pop of its own); clobbers AF,
@@ -3589,6 +3614,7 @@ __PRINTCHAR:
 	    LOCAL __PC_S_TAB1, __PC_S_TAB2
 	    push hl
 	    push bc
+#line 162 "src/lib/arch/cpc/runtime/print.asm"
 	    ld hl, PRINT_STATE
 	    ld c, (hl)          ; C = pending state (0 = none)
 	    ld (hl), 0          ; consumed; handlers below re-arm as needed
@@ -3604,6 +3630,7 @@ __PRINTCHAR:
 	    call JUMP_HL_PLUS_2A
 	    jr __PC_DONE
 __PC_NORMAL:            ; printable char (32-255) -> TXT_OUTPUT
+#line 195 "src/lib/arch/cpc/runtime/print.asm"
 	    cp 144
 	    jr nc, __PC_OUT
 	    cp 128
@@ -3625,13 +3652,15 @@ __PC_NORMAL:            ; printable char (32-255) -> TXT_OUTPUT
 __PC_OUT:
 	    call .core.__FW_CALL
 	    defw $BB5A
-#line 184 "src/lib/arch/cpc/runtime/print.asm"
+#line 219 "src/lib/arch/cpc/runtime/print.asm"
 	    jr __PC_DONE
+#line 221 "src/lib/arch/cpc/runtime/print.asm"
 __PC_STATE_DISPATCH:    ; C held a pending state -> this byte is its parameter
 	    ld hl, __PC_STATE_TABLE
 	    ld a, c
 	    call JUMP_HL_PLUS_2A
 __PC_DONE:
+#line 231 "src/lib/arch/cpc/runtime/print.asm"
 	    pop bc
 	    pop hl
 	    ret
@@ -3671,13 +3700,15 @@ __PC_NEWLINE_CODE:      ; CHR$(13): newline
 	; which preserves all registers.
 ; Registers clobbered: AF (main); BC', DE', HL', AF' (the gate).
 __PRINT_NEWLINE:
+#line 283 "src/lib/arch/cpc/runtime/print.asm"
 	    ld a, 13
 	    call .core.__FW_CALL
 	    defw $BB5A
 	    ld a, 10
 	    call .core.__FW_CALL
 	    defw $BB5A
-#line 246 "src/lib/arch/cpc/runtime/print.asm"
+#line 290 "src/lib/arch/cpc/runtime/print.asm"
+#line 293 "src/lib/arch/cpc/runtime/print.asm"
 	    ret
 __PC_ARM_AT:
 	    ld a, 1
@@ -3764,7 +3795,7 @@ __PC_S_AT_COL:          ; state 2: B = COL; D = stashed ROW, E = COL
 	    ld d, a
 	    ld e, b
 	    call __SAVE_S_POSN  ; no bounds check -- matches zx48k's embedded AT
-#line 341 "src/lib/arch/cpc/runtime/print.asm"
+#line 388 "src/lib/arch/cpc/runtime/print.asm"
 	    ret
 __PC_S_INK:
 	    ld a, b
@@ -3908,7 +3939,7 @@ PRINT_AT:
 	    cp e
 	    jr c, __PA_ERR        ; column > last column of the current mode
 	    call __SAVE_S_POSN
-#line 515 "src/lib/arch/cpc/runtime/print.asm"
+#line 562 "src/lib/arch/cpc/runtime/print.asm"
 	    ret
 __PA_ERR:
 	    ld a, ERROR_OutOfScreen
@@ -3950,16 +3981,16 @@ __PA_ERR:
 	; di/halt. Interrupts are still enabled at this point (the prologue's
 	; own `di` is long past, and nothing here disables them), so the gate's
 	; own `ei`/`di` bracket around each character is safe.
-#line 27 "src/lib/arch/cpc/runtime/stub.asm"
+#line 30 "src/lib/arch/cpc/runtime/stub.asm"
 	    push namespace core
 	; __CPC_NOT_IMPLEMENTED -- hangs the CPU. Nothing calls or returns from
 	; this; it is a dead end reached only by a `jp` from an unfinished stub.
 ; Firmware entry called: none. Registers clobbered: none (never returns).
 __CPC_NOT_IMPLEMENTED:
-#line 61 "src/lib/arch/cpc/runtime/stub.asm"
+#line 70 "src/lib/arch/cpc/runtime/stub.asm"
 	    di
 	    halt
-#line 64 "src/lib/arch/cpc/runtime/stub.asm"
+#line 73 "src/lib/arch/cpc/runtime/stub.asm"
 	    pop namespace
 #line 12 "src/lib/arch/cpc/runtime/attr.asm"
 	    push namespace core

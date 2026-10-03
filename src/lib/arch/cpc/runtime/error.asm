@@ -33,6 +33,9 @@
 #include once <fwcall.asm>
 #include once <sysvars.asm>
 #include once <bootstrap.asm>
+#ifdef CPC_BAREMETAL
+#include once <txtbare.asm>
+#endif
 
     push namespace core
 
@@ -108,12 +111,24 @@ __EPE_DONE:
 ; BC, DE, HL (the callers keep the error number and digits there).
 ; __ERR_RESET -- the machine reset after an error.
 #ifdef CPC_BAREMETAL
-; Bare-metal mode: no firmware. The screen part is added with the bare
-; text output (Phase 6 B2); the echo goes straight to the printer port.
+; Bare-metal mode: no firmware. The screen part is txtbare.asm's glyph
+; renderer (13 = CR, 10 = LF, 32-255 drawn); the echo goes straight to the
+; printer port. Both preserve AF, BC, DE, HL.
 __ERR_SCR:
+    push af
+    push bc
+    push de
+    push hl
+    call __BT_PUTC
+    pop  hl
+    pop  de
+    pop  bc
+    pop  af
     ret
 __ERR_OUT:
+    call __ERR_SCR
 #ifdef __CPC_PRINTER_ECHO__
+    push af
     push bc
     push de
     push hl
@@ -121,6 +136,7 @@ __ERR_OUT:
     pop  hl
     pop  de
     pop  bc
+    pop  af
 #endif
     ret
 __ERR_RESET:

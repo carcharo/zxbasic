@@ -16,6 +16,7 @@
 ; The firmware numbers colours 0-26; __CPC_HWCOL maps them to the codes.
 
 #include once <fwcall.asm>
+#include once <sysvars.asm>
 
     push namespace core
 
@@ -30,7 +31,8 @@ __CPC_HWCOL:
 ; firmware colour 0-26. Out-of-range values are ignored. The two writes
 ; are made with interrupts off (the firmware's interrupt handler selects
 ; pens too, for flashing inks), and it returns with interrupts on.
-; Firmware entries called: none.
+; Firmware entries called: none. In bare-metal mode the colour is also kept
+; in PAL_SHADOW (the pen's colour, for BORDER).
 ; Registers clobbered: AF, BC, HL.
 __CPC_GA_SET:
     PROC
@@ -42,6 +44,14 @@ __CPC_GA_SET:
     ld   a, c
     cp   27
     ret  nc
+#ifdef CPC_BAREMETAL
+    ld   hl, PAL_SHADOW     ; remember the pen's colour (BORDER reads it)
+    ld   a, b
+    add  a, l
+    ld   l, a
+    ld   (hl), c
+    ld   a, c
+#endif
     ld   hl, __CPC_HWCOL
     add  a, l
     ld   l, a

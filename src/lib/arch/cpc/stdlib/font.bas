@@ -43,6 +43,23 @@
 ' Firmware: TXT_SET_M_TABLE (&BBAB, DE = first character, HL = table),
 ' first call only. Also uses __MEM_ALLOC / __MEM_FREE.
 ' Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF'.
+#ifdef CPC_BAREMETAL
+' Bare-metal mode: no firmware, no allocation. The glyph table is part of
+' the program (runtime/txtbare.asm) and already holds characters 32-255, so
+' SetFont just copies the 768 bytes over characters 32-127. UDGs (the
+' table from character 144) are not moved.
+sub SetFont(addr as uinteger)
+    asm
+    push namespace core
+    ld l, (ix+4)
+    ld h, (ix+5)
+    ld de, __CPC_FONT
+    ld bc, 768
+    ldir
+    pop namespace
+    end asm
+end sub
+#else
 sub SetFont(addr as uinteger)
     asm
     push namespace core
@@ -96,13 +113,18 @@ __SF_END:
     pop namespace
     end asm
 end sub
+#endif
 
 #pragma pop(case_insensitive)
 
+#ifdef CPC_BAREMETAL
+#require "txtbare.asm"
+#else
 #require "fwcall.asm"
 #require "error.asm"
 #require "sysvars.asm"
 #require "mem/alloc.asm"
 #require "mem/free.asm"
+#endif
 
 #endif

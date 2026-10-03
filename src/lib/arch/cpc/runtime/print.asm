@@ -75,7 +75,8 @@
 ; live registers, e.g. printstr.asm's string pointer/length), not on
 ; scratch. So the "which control code came next" state lives in a plain
 ; memory byte (PRINT_STATE, sysvars.asm) instead, and BC/HL are
-; protected with an ordinary push/pop around the whole routine.
+; protected with an ordinary push/pop around the whole routine (bare-metal
+; mode also keeps DE: the firmware's TXT_OUTPUT preserved it and callers use that).
 
 #include once <sposn.asm>
 #include once <fwcall.asm>
@@ -90,10 +91,26 @@
 #include once <bold.asm>
 #include once <italic.asm>
 #include once <sysvars.asm>
+#ifdef CPC_BAREMETAL
+#include once <txtbare.asm>
+#endif
 
     push namespace core
 
 #ifdef __CPC_PRINTER_ECHO__
+#ifdef CPC_BAREMETAL
+; __PRN_ECHO -- sends A to the printer port directly (bareboot.asm's
+; __CPC_PRN_CHAR). Preserves AF, BC, DE.
+__PRN_ECHO:
+    push af
+    push bc
+    push de
+    call __CPC_PRN_CHAR
+    pop  de
+    pop  bc
+    pop  af
+    ret
+#else
 ; __PRN_ECHO -- sends A to the printer (MC_PRINT_CHAR &BD2B), through
 ; the gate; preserves A/F. Retried a few times: the Firmware Guide says
 ; a busy printer makes MC_PRINT_CHAR give up after 0.4s (Carry clear on
@@ -114,6 +131,7 @@ __PE_DONE:
     pop  af
     ret
     ENDP
+#endif
 #endif
 
 ; __PRINTCHAR: prints the character/control code in A.
@@ -137,6 +155,10 @@ __PRINTCHAR:
 
     push hl
     push bc
+#ifdef CPC_BAREMETAL
+    push de             ; TXT_OUTPUT preserved every register, and callers
+                        ; (printnum.asm and friends) rely on DE surviving
+#endif
 
     ld hl, PRINT_STATE
     ld c, (hl)          ; C = pending state (0 = none)
@@ -157,6 +179,19 @@ __PRINTCHAR:
     jr __PC_DONE
 
 __PC_NORMAL:            ; printable char (32-255) -> TXT_OUTPUT
+#ifdef CPC_BAREMETAL
+    ; Bare-metal mode: the glyph table is indexed by the Spectrum code
+    ; directly (block graphics 128-143 are generated in its numbering),
+    ; so there is no translation.
+    push af
+    call __BT_PUTC
+    pop af              ; the character again, for the echo
+#ifdef __CPC_PRINTER_ECHO__
+    call __PRN_ECHO
+#endif
+    jr __PC_DONE
+__PC_OUT:               ; (unused in bare mode; the label keeps the LOCAL list valid)
+#else
     cp 144
     jr nc, __PC_OUT
     cp 128
@@ -182,6 +217,7 @@ __PC_OUT:
     call __PRN_ECHO     ; A still holds the char -- TXT_OUTPUT preserves it
 #endif
     jr __PC_DONE
+#endif
 
 __PC_STATE_DISPATCH:    ; C held a pending state -> this byte is its parameter
     ld hl, __PC_STATE_TABLE
@@ -189,6 +225,9 @@ __PC_STATE_DISPATCH:    ; C held a pending state -> this byte is its parameter
     call JUMP_HL_PLUS_2A
 
 __PC_DONE:
+#ifdef CPC_BAREMETAL
+    pop de
+#endif
     pop bc
     pop hl
     ret
@@ -234,12 +273,20 @@ __PC_NEWLINE_CODE:      ; CHR$(13): newline
 ; which preserves all registers.
 ; Registers clobbered: AF (main); BC', DE', HL', AF' (the gate).
 __PRINT_NEWLINE:
+#ifdef CPC_BAREMETAL
+    ; Bare-metal mode: CR then LF (the LF scrolls at the bottom row) by
+    ; __BT_PUTC; no firmware entry. Registers clobbered: AF, BC, DE, HL.
+    call __BT_CR
+    call __BT_LF
+    ld a, 10            ; (for the printer echo below)
+#else
     ld a, 13
     call .core.__FW_CALL
     defw $BB5A
     ld a, 10
     call .core.__FW_CALL
     defw $BB5A
+#endif
 #ifdef __CPC_PRINTER_ECHO__
     call __PRN_ECHO     ; printer gets a bare LF, not CR+LF -- see header
 #endif

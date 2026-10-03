@@ -19,6 +19,9 @@
 #include once <colour.asm>
 #include once <fwcall.asm>
 #include once <sysvars.asm>
+#ifdef CPC_BAREMETAL
+#include once <txtbare.asm>
+#endif
 
     push namespace core
 
@@ -56,6 +59,14 @@ __REFRESH_TMP:
     ENDP
 
 
+#ifdef CPC_BAREMETAL
+; Bare-metal mode: applying the temporary attribute means refilling the
+; glyph renderer's tables (txtbare.asm): ink and paper pens of the current
+; mode from ATTR_T, swapped when the temporary INVERSE bit is set.
+; Firmware entries called: none. Registers clobbered: none.
+__SET_ATTR_MODE:
+    jp   __BT_PENMASKS
+#else
 ; Applies ATTR_T's ink/paper (Spectrum colours, mapped to pens of the
 ; current mode by colour.asm's __INK_TO_PEN) and P_FLAG's temporary INVERSE bit
 ; (bit 2) to the firmware's current pen/paper. Always re-derives both
@@ -95,5 +106,7 @@ __SET_ATTR_MODE:
 __SAM_NOINV:
     ret
     ENDP
+
+#endif
 
     pop namespace

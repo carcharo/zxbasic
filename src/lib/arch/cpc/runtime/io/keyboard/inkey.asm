@@ -17,6 +17,11 @@
 ; The firmware's key buffer keeps filling in the background, so INPUT
 ; (input.bas) flushes it when it starts.
 ;
+; Bare-metal mode (-D CPC_BAREMETAL): the same, with the translation
+; tables and the caps/shift locks of kbare.asm instead of the firmware's
+; (no firmware is called). -D CPC_INKEY_BUFFERED is an error there: there
+; is no firmware key buffer.
+;
 ; With -D CPC_INKEY_BUFFERED: the CPC's own buffered model (like
 ; Locomotive BASIC's INKEY$) instead: the next character from the
 ; firmware's key buffer (KM_READ_CHAR), or "" if there is none. A key
@@ -34,10 +39,19 @@
 ; gate). Default mode reads the PPI with interrupts off (returns with
 ; them on).
 
+#ifdef CPC_BAREMETAL
+#ifdef CPC_INKEY_BUFFERED
+#error "CPC_INKEY_BUFFERED needs the firmware's key buffer: it can't be used with CPC_BAREMETAL"
+#endif
+#endif
+
 #include once <fwcall.asm>
 #include once <mem/alloc.asm>
 #ifndef CPC_INKEY_BUFFERED
 #include once <io/keyboard/kscan.asm>
+#ifdef CPC_BAREMETAL
+#include once <io/keyboard/kbare.asm>
+#endif
 #endif
 
     push namespace core

@@ -229,11 +229,26 @@ __BE_RESET:
 
 ; __CPC_RESET -- resets the machine: lower ROM paged in, jump to 0 (the
 ; firmware's cold start on a 464/664/6128, or a cartridge's start).
+; The paging must run from RAM above &4000: this code may sit below
+; &4000, where the instruction after the Gate Array write would already
+; be fetched from the ROM. So the last three instructions are copied to
+; the start of the private block (&BC00; nothing needs it any more) and
+; run there.
 ; Registers clobbered: n/a (never returns).
 __CPC_RESET:
+    PROC
+    LOCAL __BR_STUB, __BR_END
     di
+    ld   hl, __BR_STUB
+    ld   de, .core.CPC_PRIV_BASE
+    ld   bc, __BR_END - __BR_STUB
+    ldir
+    jp   .core.CPC_PRIV_BASE
+__BR_STUB:
     ld   bc, $7F89          ; lower ROM on, upper off, mode 1
     out  (c), c
     rst  0
+__BR_END:
+    ENDP
 
     pop namespace

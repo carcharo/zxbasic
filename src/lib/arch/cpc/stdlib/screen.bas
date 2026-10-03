@@ -72,6 +72,13 @@ function screen(byval row as ubyte, byval col as ubyte) as string
     cp (hl)
     jr nc, __SCREEN_END
 
+#ifdef CPC_BAREMETAL
+    ld d, (ix+5)            ; row
+    ld e, (ix+7)            ; col
+    call __BT_RDCHAR        ; A = char, Carry set if recognised
+    jr nc, __SCREEN_END     ; not recognised: ""
+__SCREEN_NOSWAP:            ; (the glyph table uses the Spectrum's numbering)
+#else
     call .core.__FW_CALL
     defw $BB78              ; TXT_GET_CURSOR
     push hl                 ; the caller's cursor
@@ -108,6 +115,7 @@ function screen(byval row as ubyte, byval col as ubyte) as string
     or b
     or $80
 __SCREEN_NOSWAP:
+#endif
     pop hl
     push hl
     ld (hl), 1              ; length 1
@@ -131,7 +139,11 @@ end function
 
 #pragma pop(case_insensitive)
 
+#ifdef CPC_BAREMETAL
+#require "txtbare.asm"
+#else
 #require "fwcall.asm"
+#endif
 #require "mem/alloc.asm"
 
 #endif

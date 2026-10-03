@@ -300,6 +300,22 @@ _y:
 	FH_FRAMES           EQU SYSVAR_BASE + $E5   ; 4B -- frames counted (framehook.asm)
 	GM_COUNT            EQU SYSVAR_BASE + $E9   ; DB -- interrupts since last frame (game mode)
 	FH_BLOCK            EQU SYSVAR_BASE + $EA   ; 9B -- frame-flyback event block (framehook.asm)
+; --- Bare-metal text (txtbare.asm, Phase 6 B2): $100-$13F and $200-$21F,
+	; clear of the sysvars above so parallel additions there cannot collide.
+	; PAL_SHADOW reuses the 17 free bytes at $C0 (bare mode keeps no firmware
+	; ink table, so BORDER reads the pen colours from here).
+	PAL_SHADOW          EQU SYSVAR_BASE + $C0   ; 17B -- colour (0-26) of pens 0-15 and the border
+	BT_MODE             EQU SYSVAR_BASE + $100  ; DB -- current screen mode 0-3
+	BT_BPC              EQU SYSVAR_BASE + $101  ; DB -- screen bytes per glyph row (4/2/1)
+	BT_PPB              EQU SYSVAR_BASE + $102  ; DB -- pixels per screen byte (2/4/8)
+	BT_MASK             EQU SYSVAR_BASE + $103  ; DB -- pen number mask (15/3/1)
+	BT_FILL             EQU SYSVAR_BASE + $104  ; DB -- screen byte of an all-paper row (scroll fill)
+BT_MX               EQU SYSVAR_BASE + $105  ; DB -- mode 2: ink mask xor paper mask
+BT_MP               EQU SYSVAR_BASE + $106  ; DB -- mode 2: paper mask
+	BT_BUF              EQU SYSVAR_BASE + $108  ; 8B -- SCREEN$ glyph bitmap being matched
+	BT_TRAMP            EQU SYSVAR_BASE + $120  ; 32B -- font copy routine (runs with the lower ROM in)
+	BT_PIX              EQU SYSVAR_BASE + $140  ; 64B -- SCREEN$ cell pixels (pen numbers)
+	BT_TBL              EQU SYSVAR_BASE + $200  ; 16B, page aligned -- screen byte per glyph-bit group
 	CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
@@ -801,6 +817,7 @@ __CPC_END:
 	    pop namespace
 #line 210 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 36 "src/lib/arch/cpc/runtime/error.asm"
+#line 39 "src/lib/arch/cpc/runtime/error.asm"
 	    push namespace core
 	; Error code definitions (as in ZX spectrum manual)
 ; Set error code with:
@@ -819,8 +836,8 @@ __CPC_END:
 	ERROR_BreakIntoProgram  EQU    20
 	ERROR_TapeLoadingErr    EQU    26
 __ERR_STR: DEFB "Error ", 0
-#line 84 "src/lib/arch/cpc/runtime/error.asm"
-#line 85 "src/lib/arch/cpc/runtime/error.asm"
+#line 87 "src/lib/arch/cpc/runtime/error.asm"
+#line 88 "src/lib/arch/cpc/runtime/error.asm"
 ; Raises a runtime error: stores the code, prints "Error n" on a fresh
 	; line, waits for a keypress, then resets to BASIC's Ready prompt (END's
 	; own reset, generic.py's _end -- see cpc-port-notes.md Sec6.5).
@@ -845,7 +862,7 @@ __ERR_STR: DEFB "Error ", 0
 	; screen and, under -D __CPC_PRINTER_ECHO__, the printer. Both preserve
 	; BC, DE, HL (the callers keep the error number and digits there).
 	; __ERR_RESET -- the machine reset after an error.
-#line 129 "src/lib/arch/cpc/runtime/error.asm"
+#line 145 "src/lib/arch/cpc/runtime/error.asm"
 ; Firmware: TXT_OUTPUT (&BB5A, preserves every register) through the gate.
 __ERR_SCR:
 	    call .core.__FW_CALL
@@ -854,12 +871,12 @@ __ERR_SCR:
 __ERR_OUT:
 	    call .core.__FW_CALL
 	    defw $BB5A
-#line 140 "src/lib/arch/cpc/runtime/error.asm"
+#line 156 "src/lib/arch/cpc/runtime/error.asm"
 	    ret
 __ERR_RESET:
 	    di
 	    rst  0
-#line 145 "src/lib/arch/cpc/runtime/error.asm"
+#line 161 "src/lib/arch/cpc/runtime/error.asm"
 __ERROR:
 	    PROC
 	    ld   (ERR_NR), a
@@ -885,11 +902,11 @@ __ERROR_MSG_LOOP:
 __ERROR_MSG_DONE:
 	    ld   a, c
 	    call __PRINT_DECIMAL_A
-#line 181 "src/lib/arch/cpc/runtime/error.asm"
+#line 197 "src/lib/arch/cpc/runtime/error.asm"
 	    ; Flush stale keys, then wait for a real one (bootstrap.asm).
 	    call __CPC_WAIT_KEY
 	    jp   __ERR_RESET    ; reset to BASIC's Ready prompt
-#line 185 "src/lib/arch/cpc/runtime/error.asm"
+#line 201 "src/lib/arch/cpc/runtime/error.asm"
 	    ENDP
 	; Sets the error system variable, but keeps running.
 	; Usually this instruction if followed by the END intermediate instruction.

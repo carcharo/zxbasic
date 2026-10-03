@@ -221,6 +221,23 @@ FH_FRAMES           EQU SYSVAR_BASE + $E5   ; 4B -- frames counted (framehook.as
 GM_COUNT            EQU SYSVAR_BASE + $E9   ; DB -- interrupts since last frame (game mode)
 FH_BLOCK            EQU SYSVAR_BASE + $EA   ; 9B -- frame-flyback event block (framehook.asm)
 
+; --- Bare-metal text (txtbare.asm, Phase 6 B2): $100-$13F and $200-$21F,
+; clear of the sysvars above so parallel additions there cannot collide.
+; PAL_SHADOW reuses the 17 free bytes at $C0 (bare mode keeps no firmware
+; ink table, so BORDER reads the pen colours from here).
+PAL_SHADOW          EQU SYSVAR_BASE + $C0   ; 17B -- colour (0-26) of pens 0-15 and the border
+BT_MODE             EQU SYSVAR_BASE + $100  ; DB -- current screen mode 0-3
+BT_BPC              EQU SYSVAR_BASE + $101  ; DB -- screen bytes per glyph row (4/2/1)
+BT_PPB              EQU SYSVAR_BASE + $102  ; DB -- pixels per screen byte (2/4/8)
+BT_MASK             EQU SYSVAR_BASE + $103  ; DB -- pen number mask (15/3/1)
+BT_FILL             EQU SYSVAR_BASE + $104  ; DB -- screen byte of an all-paper row (scroll fill)
+BT_MX               EQU SYSVAR_BASE + $105  ; DB -- mode 2: ink mask xor paper mask
+BT_MP               EQU SYSVAR_BASE + $106  ; DB -- mode 2: paper mask
+BT_BUF              EQU SYSVAR_BASE + $108  ; 8B -- SCREEN$ glyph bitmap being matched
+BT_TRAMP            EQU SYSVAR_BASE + $120  ; 32B -- font copy routine (runs with the lower ROM in)
+BT_PIX              EQU SYSVAR_BASE + $140  ; 64B -- SCREEN$ cell pixels (pen numbers)
+BT_TBL              EQU SYSVAR_BASE + $200  ; 16B, page aligned -- screen byte per glyph-bit group
+
 CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
                                              ; .core.CPC_PRIV_SIZE when this table grows
 

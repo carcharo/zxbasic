@@ -28,6 +28,12 @@
 #include once <fwcall.asm>
 #include once <mem/alloc.asm>
 #include once <sysvars.asm>
+#ifdef CPC_BAREMETAL
+; Bare-metal mode: the UDGs are part of the glyph table (txtbare.asm sets
+; UDG at start-up, pointing at the glyph of character 144); nothing to
+; allocate and no firmware matrix table to install.
+#include once <txtbare.asm>
+#else
 
 #init .core.__UDG_INIT
 
@@ -68,3 +74,4 @@ __UI_NOMEM:
     ENDP
 
     pop namespace
+#endif

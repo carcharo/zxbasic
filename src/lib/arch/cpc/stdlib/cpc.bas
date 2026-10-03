@@ -72,6 +72,13 @@
 '   SoundStop  the firmware's SOUND_RESET: all queues emptied, all
 '     channels silenced.
 '
+' Bare-metal mode (-D CPC_BAREMETAL, no firmware): WaitVsync waits for the
+' next frame of the interrupt handler's counter; SoundStop silences the AY;
+' SoundQueue, SoundFree, SoundBusy and SoundEnvelope need the firmware's
+' sound manager and are a compile error (an "Undefined GLOBAL label ...
+' needs_the_firmware__not_available_with_CPC_BAREMETAL"). AyWrite/AyRead
+' work as ever.
+'
 ' Sound chip ownership: the firmware's sound manager (SOUND, BEEP) runs
 ' from the interrupt handler and writes the AY by itself whenever a note
 ' is queued. A program that drives the AY directly (AyWrite, or the Play
@@ -97,6 +104,18 @@
 
 ' Firmware: SCR_SET_MODE (&BC0E), then the runtime's per-mode variables
 ' (pen map, widths) and CLS, so the screen clears to the current PAPER.
+#ifdef CPC_BAREMETAL
+' Bare-metal mode: the Gate Array's mode register directly, the runtime's
+' per-mode variables, and the screen cleared to the current PAPER
+' (runtime/txtbare.asm).
+sub fastcall Mode(n as ubyte)
+    asm
+    push namespace core
+    call __BT_SET_MODE
+    pop namespace
+    end asm
+end sub
+#else
 sub fastcall Mode(n as ubyte)
     asm
     push namespace core
@@ -110,14 +129,23 @@ sub fastcall Mode(n as ubyte)
     pop namespace
     end asm
 end sub
+#endif
 
 ' Firmware: SCR_GET_MODE (&BC11).
+#ifdef CPC_BAREMETAL
+function fastcall GetMode as ubyte
+    asm
+    ld a, (.core.BT_MODE)
+    end asm
+end function
+#else
 function fastcall GetMode as ubyte
     asm
     call .core.__FW_CALL
     defw $BC11
     end asm
 end function
+#endif
 
 ' Firmware: SCR_SET_INK (&BC32, A = pen, B and C = the colour twice,
 ' i.e. not flashing); then the same colour straight to the Gate Array,
@@ -141,12 +169,26 @@ end sub
 
 ' Firmware: MC_WAIT_FLYBACK (&BD19). Returns at once if the flyback has
 ' already started, so call it once per frame.
+' Bare-metal mode (-D CPC_BAREMETAL): waits for the next frame count of the
+' interrupt handler (FH_FRAMES, which counts at the frame flyback), i.e. it
+' always waits for the next frame; interrupts must be on.
+#ifdef CPC_BAREMETAL
+sub fastcall WaitVsync
+    asm
+    push namespace core
+    ld bc, 1
+    call __CPC_WAIT_FRAMES
+    pop namespace
+    end asm
+end sub
+#else
 sub fastcall WaitVsync
     asm
     call .core.__FW_CALL
     defw $BD19
     end asm
 end sub
+#endif
 
 ' Writes AY register reg (0-15) with value; direct PPI access with
 ' interrupts off for the write, back on afterwards (runtime/ay.asm).
@@ -168,6 +210,43 @@ function fastcall AyRead(reg as ubyte) as ubyte
     end asm
 end function
 
+#ifdef CPC_BAREMETAL
+' Bare-metal mode: there is no firmware sound manager. These four are
+' refused at compile time: using one fails with an "Undefined GLOBAL label"
+' error whose name says why. (Unused ones are ignored as usual.) Use the
+' music library, Play or AyWrite instead.
+function SoundQueue(channels as ubyte, period as uinteger, duration as uinteger, volume as ubyte, envelope as ubyte) as ubyte
+    asm
+    call .core.SoundQueue_needs_the_firmware__not_available_with_CPC_BAREMETAL
+    end asm
+end function
+
+function fastcall SoundFree(channel as ubyte) as ubyte
+    asm
+    call .core.SoundFree_needs_the_firmware__not_available_with_CPC_BAREMETAL
+    end asm
+end function
+
+function fastcall SoundBusy(channel as ubyte) as ubyte
+    asm
+    call .core.SoundBusy_needs_the_firmware__not_available_with_CPC_BAREMETAL
+    end asm
+end function
+
+sub SoundEnvelope(n as ubyte, addr as uinteger, sections as ubyte)
+    asm
+    call .core.SoundEnvelope_needs_the_firmware__not_available_with_CPC_BAREMETAL
+    end asm
+end sub
+
+' Bare-metal mode: silences the chip (volumes 0, mixer all off; the AY
+' registers directly, runtime/ay.asm). Firmware: none.
+sub SoundStop
+    asm
+    call .core.__CPC_AY_SILENCE
+    end asm
+end sub
+#else
 ' Queues a note on the firmware sound manager and returns at once; see the
 ' header for the arguments. Firmware: SOUND_QUEUE (&BCAA).
 function SoundQueue(channels as ubyte, period as uinteger, duration as uinteger, volume as ubyte, envelope as ubyte) as ubyte
@@ -220,13 +299,24 @@ sub SoundStop
     end asm
 end sub
 
+#endif
+
 #pragma pop(case_insensitive)
 
+#ifndef CPC_BAREMETAL
 #require "fwcall.asm"
+#endif
 #require "colour.asm"
 #require "cls.asm"
+#ifdef CPC_BAREMETAL
+#require "txtbare.asm"
+#endif
 #require "gacolour.asm"
 #require "ay.asm"
+#ifdef CPC_BAREMETAL
+#require "waitframes.asm"
+#else
 #require "fwsound.asm"
+#endif
 
 #endif

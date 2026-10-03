@@ -41,7 +41,7 @@ _v:
 .core.__END_PROGRAM:
 	jp .core.__CPC_END
 _Mode:
-#line 101 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 120 "src/lib/arch/cpc/stdlib/cpc.bas"
 		push namespace core
 		and 3
 		push af
@@ -51,25 +51,25 @@ _Mode:
 		call __CPC_SET_MODE_VARS
 		call CLS
 		pop namespace
-#line 112 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 131 "src/lib/arch/cpc/stdlib/cpc.bas"
 _Mode__leave:
 	ret
 _GetMode:
-#line 116 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 143 "src/lib/arch/cpc/stdlib/cpc.bas"
 		call .core.__FW_CALL
 		defw $BC11
-#line 120 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 147 "src/lib/arch/cpc/stdlib/cpc.bas"
 _GetMode__leave:
 	ret
 _SetInk:
 	push ix
 	ld ix, 0
 	add ix, sp
-#line 127 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 155 "src/lib/arch/cpc/stdlib/cpc.bas"
 		ld a, (ix+5)
 		ld c, (ix+7)
 		call .core.__CPC_SET_INK
-#line 132 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 160 "src/lib/arch/cpc/stdlib/cpc.bas"
 _SetInk__leave:
 	ld sp, ix
 	pop ix
@@ -80,27 +80,27 @@ _SetInk__leave:
 	exx
 	ret
 _SetBorder:
-#line 137 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 165 "src/lib/arch/cpc/stdlib/cpc.bas"
 		call .core.__CPC_SET_BORDER
-#line 140 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 168 "src/lib/arch/cpc/stdlib/cpc.bas"
 _SetBorder__leave:
 	ret
 _WaitVsync:
-#line 145 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 186 "src/lib/arch/cpc/stdlib/cpc.bas"
 		call .core.__FW_CALL
 		defw $BD19
-#line 149 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 190 "src/lib/arch/cpc/stdlib/cpc.bas"
 _WaitVsync__leave:
 	ret
 _AyWrite:
 	push ix
 	ld ix, 0
 	add ix, sp
-#line 155 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 197 "src/lib/arch/cpc/stdlib/cpc.bas"
 		ld a, (ix+5)
 		ld c, (ix+7)
 		call .core.__CPC_AY_WRITE_DI
-#line 160 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 202 "src/lib/arch/cpc/stdlib/cpc.bas"
 _AyWrite__leave:
 	ld sp, ix
 	pop ix
@@ -111,16 +111,16 @@ _AyWrite__leave:
 	exx
 	ret
 _AyRead:
-#line 166 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 208 "src/lib/arch/cpc/stdlib/cpc.bas"
 		call .core.__CPC_AY_READ_DI
-#line 169 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 211 "src/lib/arch/cpc/stdlib/cpc.bas"
 _AyRead__leave:
 	ret
 _SoundQueue:
 	push ix
 	ld ix, 0
 	add ix, sp
-#line 174 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 253 "src/lib/arch/cpc/stdlib/cpc.bas"
 		ld l, (ix+6)
 		ld h, (ix+7)
 		ld e, (ix+8)
@@ -129,7 +129,7 @@ _SoundQueue:
 		ld b, (ix+11)
 		ld c, (ix+13)
 		call .core.__CPC_SND_QUEUE
-#line 184 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 263 "src/lib/arch/cpc/stdlib/cpc.bas"
 _SoundQueue__leave:
 	ld sp, ix
 	pop ix
@@ -143,29 +143,29 @@ _SoundQueue__leave:
 	exx
 	ret
 _SoundFree:
-#line 189 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 268 "src/lib/arch/cpc/stdlib/cpc.bas"
 		call .core.__CPC_SND_CHECK
 		and 7
-#line 193 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 272 "src/lib/arch/cpc/stdlib/cpc.bas"
 _SoundFree__leave:
 	ret
 _SoundBusy:
-#line 198 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 277 "src/lib/arch/cpc/stdlib/cpc.bas"
 		call .core.__CPC_SND_BUSY
-#line 201 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 280 "src/lib/arch/cpc/stdlib/cpc.bas"
 _SoundBusy__leave:
 	ret
 _SoundEnvelope:
 	push ix
 	ld ix, 0
 	add ix, sp
-#line 206 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 285 "src/lib/arch/cpc/stdlib/cpc.bas"
 		ld a, (ix+5)
 		ld l, (ix+6)
 		ld h, (ix+7)
 		ld b, (ix+9)
 		call .core.__CPC_SND_ENV
-#line 213 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 292 "src/lib/arch/cpc/stdlib/cpc.bas"
 _SoundEnvelope__leave:
 	ld sp, ix
 	pop ix
@@ -180,9 +180,9 @@ _SoundStop:
 	push ix
 	ld ix, 0
 	add ix, sp
-#line 218 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 297 "src/lib/arch/cpc/stdlib/cpc.bas"
 		call .core.__CPC_SND_RESET
-#line 221 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 300 "src/lib/arch/cpc/stdlib/cpc.bas"
 _SoundStop__leave:
 	ld sp, ix
 	pop ix
@@ -216,6 +216,10 @@ _SoundStop__leave:
 	; is queued, so a program that uses these routines directly must not
 	; also queue firmware sounds. Call SOUND_RESET (&BCA7) once first to make
 	; the manager idle (Play does).
+	;
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware sound manager,
+	; so nothing else writes the AY; BEEP, Play, the music player and these
+	; routines are the only users (one at a time).
 	;
 	; Cost (CPC "NOP" units of 1 us, every instruction rounded up to a whole
 ; number of them; IN/OUT are 4): __CPC_AY_WRITE 53 us plus 5 for the CALL,
@@ -309,8 +313,9 @@ __CPC_AY_READ_DI:
 	    call __CPC_AY_READ
 	    ei
 	    ret
+#line 159 "src/lib/arch/cpc/runtime/ay.asm"
 	    pop namespace
-#line 228 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 307 "src/lib/arch/cpc/stdlib/cpc.bas"
 #line 1 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC bootstrap -- captures FW_BC, initialises the private
@@ -551,6 +556,22 @@ __CPC_AY_READ_DI:
 	FH_FRAMES           EQU SYSVAR_BASE + $E5   ; 4B -- frames counted (framehook.asm)
 	GM_COUNT            EQU SYSVAR_BASE + $E9   ; DB -- interrupts since last frame (game mode)
 	FH_BLOCK            EQU SYSVAR_BASE + $EA   ; 9B -- frame-flyback event block (framehook.asm)
+; --- Bare-metal text (txtbare.asm, Phase 6 B2): $100-$13F and $200-$21F,
+	; clear of the sysvars above so parallel additions there cannot collide.
+	; PAL_SHADOW reuses the 17 free bytes at $C0 (bare mode keeps no firmware
+	; ink table, so BORDER reads the pen colours from here).
+	PAL_SHADOW          EQU SYSVAR_BASE + $C0   ; 17B -- colour (0-26) of pens 0-15 and the border
+	BT_MODE             EQU SYSVAR_BASE + $100  ; DB -- current screen mode 0-3
+	BT_BPC              EQU SYSVAR_BASE + $101  ; DB -- screen bytes per glyph row (4/2/1)
+	BT_PPB              EQU SYSVAR_BASE + $102  ; DB -- pixels per screen byte (2/4/8)
+	BT_MASK             EQU SYSVAR_BASE + $103  ; DB -- pen number mask (15/3/1)
+	BT_FILL             EQU SYSVAR_BASE + $104  ; DB -- screen byte of an all-paper row (scroll fill)
+BT_MX               EQU SYSVAR_BASE + $105  ; DB -- mode 2: ink mask xor paper mask
+BT_MP               EQU SYSVAR_BASE + $106  ; DB -- mode 2: paper mask
+	BT_BUF              EQU SYSVAR_BASE + $108  ; 8B -- SCREEN$ glyph bitmap being matched
+	BT_TRAMP            EQU SYSVAR_BASE + $120  ; 32B -- font copy routine (runs with the lower ROM in)
+	BT_PIX              EQU SYSVAR_BASE + $140  ; 64B -- SCREEN$ cell pixels (pen numbers)
+	BT_TBL              EQU SYSVAR_BASE + $200  ; 16B, page aligned -- screen byte per glyph-bit group
 	CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
@@ -990,7 +1011,7 @@ __CPC_END:
 #line 207 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    pop namespace
 #line 210 "src/lib/arch/cpc/runtime/bootstrap.asm"
-#line 229 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 308 "src/lib/arch/cpc/stdlib/cpc.bas"
 #line 1 "src/lib/arch/cpc/runtime/cls.asm"
 	;; Clears the text screen and homes the cursor, via the firmware.
 	;;
@@ -1002,14 +1023,16 @@ __CPC_END:
 	;; Sinclair BASIC's CLS always clears to the permanent attribute's
 	;; paper (not any temporary one left over from the last PRINT), so the
 	;; permanent paper is pushed to the firmware first.
+#line 18 "src/lib/arch/cpc/runtime/cls.asm"
 	    push namespace core
 CLS:
+	    PROC
+#line 35 "src/lib/arch/cpc/runtime/cls.asm"
     ; Firmware entries called (via the gate): TXT_SET_PAPER (&BB96, A =
 	    ; paper pen) then TXT_CLEAR_WINDOW (&BB6C), which clears the
 	    ; current window with that paper and homes the cursor to its
 	    ; top-left corner (0,0 for the default full-screen window).
     ; Registers clobbered: AF, HL (main); BC', DE', HL', AF' (the gate).
-	    PROC
 	    ld a, (ATTR_P)
 	    rrca
 	    rrca
@@ -1020,9 +1043,10 @@ CLS:
 	    call .core.__FW_CALL
 	    defw $BB6C               ; TXT_CLEAR_WINDOW
 	    ret
+#line 54 "src/lib/arch/cpc/runtime/cls.asm"
 	    ENDP
 	    pop namespace
-#line 230 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 309 "src/lib/arch/cpc/stdlib/cpc.bas"
 #line 1 "src/lib/arch/cpc/runtime/fwsound.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC firmware sound manager, non-blocking entries
@@ -1165,7 +1189,7 @@ __CPC_SND_RESET:
 	    defw $BCA7
 	    ret
 	    pop namespace
-#line 233 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 312 "src/lib/arch/cpc/stdlib/cpc.bas"
 #line 1 "src/lib/arch/cpc/runtime/gacolour.asm"
 	; -----------------------------------------------------------------------
 	; Colours -- firmware and Gate Array together (SetInk, SetBorder)
@@ -1194,7 +1218,8 @@ __CPC_HWCOL:
 	; firmware colour 0-26. Out-of-range values are ignored. The two writes
 	; are made with interrupts off (the firmware's interrupt handler selects
 	; pens too, for flashing inks), and it returns with interrupts on.
-; Firmware entries called: none.
+; Firmware entries called: none. In bare-metal mode the colour is also kept
+	; in PAL_SHADOW (the pen's colour, for BORDER).
 ; Registers clobbered: AF, BC, HL.
 __CPC_GA_SET:
 	    PROC
@@ -1205,6 +1230,7 @@ __CPC_GA_SET:
 	    ld   a, c
 	    cp   27
 	    ret  nc
+#line 55 "src/lib/arch/cpc/runtime/gacolour.asm"
 	    ld   hl, __CPC_HWCOL
 	    add  a, l
 	    ld   l, a
@@ -1241,7 +1267,7 @@ __CPC_SET_INK:
 	    defw $BC32
 	    pop  bc
 	    pop  af
-#line 84 "src/lib/arch/cpc/runtime/gacolour.asm"
+#line 94 "src/lib/arch/cpc/runtime/gacolour.asm"
     jp   __CPC_GA_SET           ; bare-metal mode: the Gate Array only
 ; __CPC_SET_BORDER -- A = firmware colour 0-26: sets the border in the
 	; firmware and on the Gate Array. Colours above 26 are ignored.
@@ -1256,9 +1282,9 @@ __CPC_SET_BORDER:
 	    call .core.__FW_CALL
 	    defw $BC38
 	    pop  bc
-#line 101 "src/lib/arch/cpc/runtime/gacolour.asm"
+#line 111 "src/lib/arch/cpc/runtime/gacolour.asm"
 	    ld   a, 16
     jp   __CPC_GA_SET           ; bare-metal mode: the Gate Array only
 	    pop namespace
-#line 234 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 313 "src/lib/arch/cpc/stdlib/cpc.bas"
 	END

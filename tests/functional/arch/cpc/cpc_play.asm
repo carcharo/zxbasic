@@ -326,13 +326,13 @@ __Play_EnvelopeShapes.__DATA__:
 .core.__END_PROGRAM:
 	jp .core.__CPC_END
 __Play_AyWrite:
-#line 242 "src/lib/arch/cpc/stdlib/play.bas"
+#line 253 "src/lib/arch/cpc/stdlib/play.bas"
 		pop hl
 		pop bc
 		ld c, b
 		call .core.__CPC_AY_WRITE
 		jp (hl)
-#line 249 "src/lib/arch/cpc/stdlib/play.bas"
+#line 260 "src/lib/arch/cpc/stdlib/play.bas"
 __Play_AyWrite__leave:
 	ret
 _Play:
@@ -361,13 +361,13 @@ _Play:
 	call .core.__ARRAY
 	ld (ix-13), l
 	ld (ix-12), h
-#line 492 "src/lib/arch/cpc/stdlib/play.bas"
+#line 509 "src/lib/arch/cpc/stdlib/play.bas"
 		call .core.__FW_CALL
 		defw $BCA7
-#line 496 "src/lib/arch/cpc/stdlib/play.bas"
-#line 498 "src/lib/arch/cpc/stdlib/play.bas"
+#line 513 "src/lib/arch/cpc/stdlib/play.bas"
+#line 516 "src/lib/arch/cpc/stdlib/play.bas"
 		di
-#line 501 "src/lib/arch/cpc/stdlib/play.bas"
+#line 519 "src/lib/arch/cpc/stdlib/play.bas"
 	ld l, (ix-13)
 	ld h, (ix-12)
 	ld (__Play_ContextPtr), hl
@@ -1299,9 +1299,9 @@ _Play:
 	sub 3
 	jp nz, .LABEL.__LABEL7
 .LABEL.__LABEL8:
-#line 765 "src/lib/arch/cpc/stdlib/play.bas"
+#line 783 "src/lib/arch/cpc/stdlib/play.bas"
 		ei
-#line 768 "src/lib/arch/cpc/stdlib/play.bas"
+#line 786 "src/lib/arch/cpc/stdlib/play.bas"
 _Play__leave:
 	ex af, af'
 	exx
@@ -1489,7 +1489,7 @@ _Play.UpdateMicroticksPerTick__leave:
 	pop ix
 	ret
 _Play.Wait:
-#line 433 "src/lib/arch/cpc/stdlib/play.bas"
+#line 444 "src/lib/arch/cpc/stdlib/play.bas"
 		proc
 		local loop
 		ld bc, 1
@@ -1498,7 +1498,7 @@ loop:
 		sbc hl, bc
 		jr nz, loop
 		endp
-#line 445 "src/lib/arch/cpc/stdlib/play.bas"
+#line 456 "src/lib/arch/cpc/stdlib/play.bas"
 _Play.Wait__leave:
 	ret
 _Play.SetChipTonePitchDivider:
@@ -1897,6 +1897,22 @@ _Play.SetChipMixer__leave:
 	FH_FRAMES           EQU SYSVAR_BASE + $E5   ; 4B -- frames counted (framehook.asm)
 	GM_COUNT            EQU SYSVAR_BASE + $E9   ; DB -- interrupts since last frame (game mode)
 	FH_BLOCK            EQU SYSVAR_BASE + $EA   ; 9B -- frame-flyback event block (framehook.asm)
+; --- Bare-metal text (txtbare.asm, Phase 6 B2): $100-$13F and $200-$21F,
+	; clear of the sysvars above so parallel additions there cannot collide.
+	; PAL_SHADOW reuses the 17 free bytes at $C0 (bare mode keeps no firmware
+	; ink table, so BORDER reads the pen colours from here).
+	PAL_SHADOW          EQU SYSVAR_BASE + $C0   ; 17B -- colour (0-26) of pens 0-15 and the border
+	BT_MODE             EQU SYSVAR_BASE + $100  ; DB -- current screen mode 0-3
+	BT_BPC              EQU SYSVAR_BASE + $101  ; DB -- screen bytes per glyph row (4/2/1)
+	BT_PPB              EQU SYSVAR_BASE + $102  ; DB -- pixels per screen byte (2/4/8)
+	BT_MASK             EQU SYSVAR_BASE + $103  ; DB -- pen number mask (15/3/1)
+	BT_FILL             EQU SYSVAR_BASE + $104  ; DB -- screen byte of an all-paper row (scroll fill)
+BT_MX               EQU SYSVAR_BASE + $105  ; DB -- mode 2: ink mask xor paper mask
+BT_MP               EQU SYSVAR_BASE + $106  ; DB -- mode 2: paper mask
+	BT_BUF              EQU SYSVAR_BASE + $108  ; 8B -- SCREEN$ glyph bitmap being matched
+	BT_TRAMP            EQU SYSVAR_BASE + $120  ; 32B -- font copy routine (runs with the lower ROM in)
+	BT_PIX              EQU SYSVAR_BASE + $140  ; 64B -- SCREEN$ cell pixels (pen numbers)
+	BT_TBL              EQU SYSVAR_BASE + $200  ; 16B, page aligned -- screen byte per glyph-bit group
 	CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
@@ -2398,6 +2414,7 @@ __CPC_END:
 	    pop namespace
 #line 210 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 36 "src/lib/arch/cpc/runtime/error.asm"
+#line 39 "src/lib/arch/cpc/runtime/error.asm"
 	    push namespace core
 	; Error code definitions (as in ZX spectrum manual)
 ; Set error code with:
@@ -2416,8 +2433,8 @@ __CPC_END:
 	ERROR_BreakIntoProgram  EQU    20
 	ERROR_TapeLoadingErr    EQU    26
 __ERR_STR: DEFB "Error ", 0
-#line 84 "src/lib/arch/cpc/runtime/error.asm"
-#line 85 "src/lib/arch/cpc/runtime/error.asm"
+#line 87 "src/lib/arch/cpc/runtime/error.asm"
+#line 88 "src/lib/arch/cpc/runtime/error.asm"
 ; Raises a runtime error: stores the code, prints "Error n" on a fresh
 	; line, waits for a keypress, then resets to BASIC's Ready prompt (END's
 	; own reset, generic.py's _end -- see cpc-port-notes.md Sec6.5).
@@ -2442,7 +2459,7 @@ __ERR_STR: DEFB "Error ", 0
 	; screen and, under -D __CPC_PRINTER_ECHO__, the printer. Both preserve
 	; BC, DE, HL (the callers keep the error number and digits there).
 	; __ERR_RESET -- the machine reset after an error.
-#line 129 "src/lib/arch/cpc/runtime/error.asm"
+#line 145 "src/lib/arch/cpc/runtime/error.asm"
 ; Firmware: TXT_OUTPUT (&BB5A, preserves every register) through the gate.
 __ERR_SCR:
 	    call .core.__FW_CALL
@@ -2451,12 +2468,12 @@ __ERR_SCR:
 __ERR_OUT:
 	    call .core.__FW_CALL
 	    defw $BB5A
-#line 140 "src/lib/arch/cpc/runtime/error.asm"
+#line 156 "src/lib/arch/cpc/runtime/error.asm"
 	    ret
 __ERR_RESET:
 	    di
 	    rst  0
-#line 145 "src/lib/arch/cpc/runtime/error.asm"
+#line 161 "src/lib/arch/cpc/runtime/error.asm"
 __ERROR:
 	    PROC
 	    ld   (ERR_NR), a
@@ -2482,11 +2499,11 @@ __ERROR_MSG_LOOP:
 __ERROR_MSG_DONE:
 	    ld   a, c
 	    call __PRINT_DECIMAL_A
-#line 181 "src/lib/arch/cpc/runtime/error.asm"
+#line 197 "src/lib/arch/cpc/runtime/error.asm"
 	    ; Flush stale keys, then wait for a real one (bootstrap.asm).
 	    call __CPC_WAIT_KEY
 	    jp   __ERR_RESET    ; reset to BASIC's Ready prompt
-#line 185 "src/lib/arch/cpc/runtime/error.asm"
+#line 201 "src/lib/arch/cpc/runtime/error.asm"
 	    ENDP
 	; Sets the error system variable, but keeps running.
 	; Usually this instruction if followed by the END intermediate instruction.
@@ -4572,7 +4589,7 @@ __DIVBYZERO:
 	    ret
 	    ENDP
 	    pop namespace
-#line 604 "src/lib/arch/cpc/stdlib/play.bas"
+#line 615 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/arith/mul16.asm"
 	    push namespace core
 __MUL16:	; Mutiplies HL with the last value stored into de stack
@@ -4599,7 +4616,7 @@ __MUL16NOADD:
 	    ret	; Result in hl (16 lower bits)
 	    ENDP
 	    pop namespace
-#line 605 "src/lib/arch/cpc/stdlib/play.bas"
+#line 616 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/arith/mul8.asm"
 	    push namespace core
 __MUL8:		; Performs 8bit x 8bit multiplication
@@ -4646,7 +4663,7 @@ __MUL8B:
 	    ret		; result = HL
 	    ENDP
 	    pop namespace
-#line 606 "src/lib/arch/cpc/stdlib/play.bas"
+#line 617 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/cpc/runtime/array/array.asm"
 ; vim: ts=4:et:sw=4:
 	; Copyleft (K) by Jose M. Rodriguez de la Rosa
@@ -4786,7 +4803,7 @@ ARRAY_SIZE_LOOP:
 	    ret
 	    ENDP
 	    pop namespace
-#line 607 "src/lib/arch/cpc/stdlib/play.bas"
+#line 618 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/array/arrayalloc.asm"
 #line 1 "src/lib/arch/zx48k/runtime/mem/calloc.asm"
 ; vim: ts=4:et:sw=4:
@@ -5164,7 +5181,7 @@ __ALLOC_INITIALIZED_LOCAL_ARRAY:
 	    ret
 #line 142 "src/lib/arch/zx48k/runtime/array/arrayalloc.asm"
 	    pop namespace
-#line 608 "src/lib/arch/cpc/stdlib/play.bas"
+#line 619 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/cpc/runtime/ay.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC AY-3-8912 register access
@@ -5193,6 +5210,10 @@ __ALLOC_INITIALIZED_LOCAL_ARRAY:
 	; is queued, so a program that uses these routines directly must not
 	; also queue firmware sounds. Call SOUND_RESET (&BCA7) once first to make
 	; the manager idle (Play does).
+	;
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware sound manager,
+	; so nothing else writes the AY; BEEP, Play, the music player and these
+	; routines are the only users (one at a time).
 	;
 	; Cost (CPC "NOP" units of 1 us, every instruction rounded up to a whole
 ; number of them; IN/OUT are 4): __CPC_AY_WRITE 53 us plus 5 for the CALL,
@@ -5286,8 +5307,9 @@ __CPC_AY_READ_DI:
 	    call __CPC_AY_READ
 	    ei
 	    ret
+#line 159 "src/lib/arch/cpc/runtime/ay.asm"
 	    pop namespace
-#line 609 "src/lib/arch/cpc/stdlib/play.bas"
+#line 620 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/bitwise/band16.asm"
 ; vim:ts=4:et:
 	; FASTCALL bitwise and16 version.
@@ -5306,7 +5328,7 @@ __BAND16:
 	    ld l, a
 	    ret
 	    pop namespace
-#line 610 "src/lib/arch/cpc/stdlib/play.bas"
+#line 621 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/bitwise/bnot16.asm"
 ; vim:ts=4:et:
 	; FASTCALL bitwise or 16 version.
@@ -5325,7 +5347,7 @@ __BNOT16:
 	    ld l, a
 	    ret
 	    pop namespace
-#line 611 "src/lib/arch/cpc/stdlib/play.bas"
+#line 622 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/cmp/eq16.asm"
 	    push namespace core
 __EQ16:	; Test if 16bit values HL == DE
@@ -5336,7 +5358,7 @@ __EQ16:	; Test if 16bit values HL == DE
 	    inc a
 	    ret
 	    pop namespace
-#line 613 "src/lib/arch/cpc/stdlib/play.bas"
+#line 624 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/ftou32reg.asm"
 #line 1 "src/lib/arch/zx48k/runtime/neg32.asm"
 	    push namespace core
@@ -5435,7 +5457,7 @@ __FTOU8:	; Converts float in C ED LH to Unsigned byte in A
 	    ld a, l
 	    ret
 	    pop namespace
-#line 614 "src/lib/arch/cpc/stdlib/play.bas"
+#line 625 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/loadstr.asm"
 	; Loads a string (ptr) from HL
 	; and duplicates it on dynamic memory again
@@ -5473,7 +5495,7 @@ __LOADSTR:		; __FASTCALL__ entry
 	    pop hl	; Recovers destiny in hl as result
 	    ret
 	    pop namespace
-#line 616 "src/lib/arch/cpc/stdlib/play.bas"
+#line 627 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/mem/free.asm"
 ; vim: ts=4:et:sw=4:
 	; Copyleft (K) by Jose M. Rodriguez de la Rosa
@@ -5632,7 +5654,7 @@ __MEM_BLOCK_JOIN:  ; Joins current block (pointed by HL) with next one (pointed 
 	    ret
 	    ENDP
 	    pop namespace
-#line 617 "src/lib/arch/cpc/stdlib/play.bas"
+#line 628 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/u32tofreg.asm"
 	    push namespace core
 __I8TOFREG:
@@ -5703,7 +5725,7 @@ __U32TOFREG_END:
 	    ret
 	    ENDP
 	    pop namespace
-#line 618 "src/lib/arch/cpc/stdlib/play.bas"
+#line 629 "src/lib/arch/cpc/stdlib/play.bas"
 .LABEL.__LABEL88:
 	DEFB 00h
 	DEFB 00h

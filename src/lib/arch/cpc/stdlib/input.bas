@@ -20,11 +20,36 @@
 #pragma push(case_insensitive)
 #pragma case_insensitive = True
 
+' Bare-metal mode (-D CPC_BAREMETAL): there is no firmware, so no key
+' buffer and no text cursor. The keys are read from the keyboard matrix
+' (runtime io/keyboard/kbare.asm: __CPC_KEY_NEXT): a key going down gives
+' its character at once, a key kept down repeats after 0.6 s and then
+' every 0.08 s, and the cursor is an underscore drawn at the print
+' position. A key already down when input() starts is ignored until it
+' is released. Everything else (DEL, RETURN, the limit, the erasing at the
+' end) is as below; ESC and the other non-text keys are ignored.
+' ------------------------------------------------------------------
+
 ' ------------------------------------------------------------------
 ' Function 'PRIVATE' to this module.
 ' Waits for a key with the text cursor shown. Firmware: TXT_CUR_ON
 ' (&BB81), KM_WAIT_CHAR (&BB06, -> A), TXT_CUR_OFF (&BB84).
 ' ------------------------------------------------------------------
+#ifdef CPC_BAREMETAL
+FUNCTION FASTCALL PRIVATEInputRead AS UBYTE
+    ASM
+    call .core.__CPC_KEY_NEXT
+    END ASM
+END FUNCTION
+
+FUNCTION PRIVATEInputKey AS UBYTE
+    DIM c AS UBYTE
+    PRINT "_"; CHR$(8);
+    c = PRIVATEInputRead()
+    PRINT " "; CHR$(8);
+    RETURN c
+END FUNCTION
+#else
 FUNCTION FASTCALL PRIVATEInputKey AS UBYTE
     ASM
     call .core.__FW_CALL
@@ -37,6 +62,7 @@ FUNCTION FASTCALL PRIVATEInputKey AS UBYTE
     pop af
     END ASM
 END FUNCTION
+#endif
 
 ' ------------------------------------------------------------------
 ' Function 'PRIVATE' to this module.
@@ -45,7 +71,11 @@ END FUNCTION
 ' ------------------------------------------------------------------
 SUB FASTCALL PRIVATEInputFlush()
     ASM
+#ifdef CPC_BAREMETAL
+    call .core.__CPC_KEY_FLUSH
+#else
     call .core.__CPC_FLUSH_KEYS
+#endif
     END ASM
 END SUB
 
@@ -88,5 +118,8 @@ END FUNCTION
 #pragma pop(case_insensitive)
 
 #require "fwcall.asm"
+#ifdef CPC_BAREMETAL
+#require "io/keyboard/kbare.asm"
+#endif
 
 #endif

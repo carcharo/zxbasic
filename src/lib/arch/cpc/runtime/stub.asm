@@ -23,6 +23,9 @@
 
 #ifdef __CPC_PRINTER_ECHO__
 #include once <fwcall.asm>
+#ifdef CPC_BAREMETAL
+#include once <bootstrap.asm>
+#endif
 #endif
 
     push namespace core
@@ -42,6 +45,11 @@ __CNI_LOOP:
     jr   z, __CNI_DONE
     inc  hl
     push hl
+#ifdef CPC_BAREMETAL
+    call __CPC_PRN_CHAR     ; bare mode: straight to the printer port
+__CNI_RETRY:                ; (unused in bare mode; keeps the LOCAL list valid)
+__CNI_SENT:
+#else
     ld   b, 3
 __CNI_RETRY:
     call .core.__FW_CALL
@@ -49,6 +57,7 @@ __CNI_RETRY:
     jr   c, __CNI_SENT
     djnz __CNI_RETRY
 __CNI_SENT:
+#endif
     pop  hl
     jr   __CNI_LOOP
 __CNI_DONE:

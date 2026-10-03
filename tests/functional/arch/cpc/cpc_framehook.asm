@@ -45,35 +45,35 @@ _cnt:
 .core.__END_PROGRAM:
 	jp .core.__CPC_END
 _FrameHook:
-#line 41 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 49 "src/lib/arch/cpc/stdlib/framehook.bas"
 		ld (.core.FH_ADDR), hl
-#line 44 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 52 "src/lib/arch/cpc/stdlib/framehook.bas"
 _FrameHook__leave:
 	ret
 _FrameHookOff:
-#line 47 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 55 "src/lib/arch/cpc/stdlib/framehook.bas"
 		ld hl, 0
 		ld (.core.FH_ADDR), hl
-#line 51 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 59 "src/lib/arch/cpc/stdlib/framehook.bas"
 _FrameHookOff__leave:
 	ret
 _Frames:
-#line 54 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 62 "src/lib/arch/cpc/stdlib/framehook.bas"
 		di
 		ld hl, (.core.FH_FRAMES)
 		ld de, (.core.FH_FRAMES + 2)
 		ei
-#line 60 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 68 "src/lib/arch/cpc/stdlib/framehook.bas"
 _Frames__leave:
 	ret
 _GameMode:
-#line 63 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 71 "src/lib/arch/cpc/stdlib/framehook.bas"
 		ld hl, 0
 		or a
 		jr z, $ + 5
 		ld hl, .core.__CPC_GM_ISR
 		ld (.core.GM_VEC), hl
-#line 70 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 78 "src/lib/arch/cpc/stdlib/framehook.bas"
 _GameMode__leave:
 	ret
 	;; --- end of user code ---
@@ -317,6 +317,22 @@ _GameMode__leave:
 	FH_FRAMES           EQU SYSVAR_BASE + $E5   ; 4B -- frames counted (framehook.asm)
 	GM_COUNT            EQU SYSVAR_BASE + $E9   ; DB -- interrupts since last frame (game mode)
 	FH_BLOCK            EQU SYSVAR_BASE + $EA   ; 9B -- frame-flyback event block (framehook.asm)
+; --- Bare-metal text (txtbare.asm, Phase 6 B2): $100-$13F and $200-$21F,
+	; clear of the sysvars above so parallel additions there cannot collide.
+	; PAL_SHADOW reuses the 17 free bytes at $C0 (bare mode keeps no firmware
+	; ink table, so BORDER reads the pen colours from here).
+	PAL_SHADOW          EQU SYSVAR_BASE + $C0   ; 17B -- colour (0-26) of pens 0-15 and the border
+	BT_MODE             EQU SYSVAR_BASE + $100  ; DB -- current screen mode 0-3
+	BT_BPC              EQU SYSVAR_BASE + $101  ; DB -- screen bytes per glyph row (4/2/1)
+	BT_PPB              EQU SYSVAR_BASE + $102  ; DB -- pixels per screen byte (2/4/8)
+	BT_MASK             EQU SYSVAR_BASE + $103  ; DB -- pen number mask (15/3/1)
+	BT_FILL             EQU SYSVAR_BASE + $104  ; DB -- screen byte of an all-paper row (scroll fill)
+BT_MX               EQU SYSVAR_BASE + $105  ; DB -- mode 2: ink mask xor paper mask
+BT_MP               EQU SYSVAR_BASE + $106  ; DB -- mode 2: paper mask
+	BT_BUF              EQU SYSVAR_BASE + $108  ; 8B -- SCREEN$ glyph bitmap being matched
+	BT_TRAMP            EQU SYSVAR_BASE + $120  ; 32B -- font copy routine (runs with the lower ROM in)
+	BT_PIX              EQU SYSVAR_BASE + $140  ; 64B -- SCREEN$ cell pixels (pen numbers)
+	BT_TBL              EQU SYSVAR_BASE + $200  ; 16B, page aligned -- screen byte per glyph-bit group
 	CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
@@ -756,7 +772,7 @@ __CPC_END:
 #line 207 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    pop namespace
 #line 210 "src/lib/arch/cpc/runtime/bootstrap.asm"
-#line 75 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 83 "src/lib/arch/cpc/stdlib/framehook.bas"
 #line 1 "src/lib/arch/cpc/runtime/framehook.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC frame hook and game mode (stdlib/framehook.bas)
@@ -910,5 +926,5 @@ __CPC_FH_EVENT:
 	    ret
 	    pop namespace
 #line 70 "src/lib/arch/cpc/runtime/framehook.asm"
-#line 76 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 84 "src/lib/arch/cpc/stdlib/framehook.bas"
 	END

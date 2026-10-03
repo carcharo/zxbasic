@@ -66,6 +66,7 @@
 	; (digits are below uppercase letters in ASCII), which is a stronger
 	; guarantee than just renaming past today's one clash. Nothing else
 	; references the old CPC_INIT_SYSVARS name.
+#line 33 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/sysvars.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC system variables
@@ -277,6 +278,22 @@
 	FH_FRAMES           EQU SYSVAR_BASE + $E5   ; 4B -- frames counted (framehook.asm)
 	GM_COUNT            EQU SYSVAR_BASE + $E9   ; DB -- interrupts since last frame (game mode)
 	FH_BLOCK            EQU SYSVAR_BASE + $EA   ; 9B -- frame-flyback event block (framehook.asm)
+; --- Bare-metal text (txtbare.asm, Phase 6 B2): $100-$13F and $200-$21F,
+	; clear of the sysvars above so parallel additions there cannot collide.
+	; PAL_SHADOW reuses the 17 free bytes at $C0 (bare mode keeps no firmware
+	; ink table, so BORDER reads the pen colours from here).
+	PAL_SHADOW          EQU SYSVAR_BASE + $C0   ; 17B -- colour (0-26) of pens 0-15 and the border
+	BT_MODE             EQU SYSVAR_BASE + $100  ; DB -- current screen mode 0-3
+	BT_BPC              EQU SYSVAR_BASE + $101  ; DB -- screen bytes per glyph row (4/2/1)
+	BT_PPB              EQU SYSVAR_BASE + $102  ; DB -- pixels per screen byte (2/4/8)
+	BT_MASK             EQU SYSVAR_BASE + $103  ; DB -- pen number mask (15/3/1)
+	BT_FILL             EQU SYSVAR_BASE + $104  ; DB -- screen byte of an all-paper row (scroll fill)
+BT_MX               EQU SYSVAR_BASE + $105  ; DB -- mode 2: ink mask xor paper mask
+BT_MP               EQU SYSVAR_BASE + $106  ; DB -- mode 2: paper mask
+	BT_BUF              EQU SYSVAR_BASE + $108  ; 8B -- SCREEN$ glyph bitmap being matched
+	BT_TRAMP            EQU SYSVAR_BASE + $120  ; 32B -- font copy routine (runs with the lower ROM in)
+	BT_PIX              EQU SYSVAR_BASE + $140  ; 64B -- SCREEN$ cell pixels (pen numbers)
+	BT_TBL              EQU SYSVAR_BASE + $200  ; 16B, page aligned -- screen byte per glyph-bit group
 	CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
@@ -293,7 +310,7 @@
 	SCR_ROWS            EQU 25      ; rows visible (0-24, 0-based)
 	SCR_SIZE            EQU (SCR_ROWS << 8) + SCR_COLS
 	    pop namespace
-#line 30 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 35 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/fwcall.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC firmware call gate
@@ -320,6 +337,11 @@
 	; Clobbers BC', DE', HL', AF' (never meaningful to compiled code across a
 	; call). Not re-entrant (the interrupt handler never calls it).
 ; Cost: about 220 T-states plus the firmware routine.
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware, so the gate is
+	; not defined at all. Anything that still calls the firmware fails to
+	; build with "undefined label __FW_CALL" -- that is how firmware-only
+	; features (LOAD/SAVE, firmware sound, direct firmware calls in asm) are
+	; refused in bare mode.
 	    push namespace core
 __FW_CALL:
 	    PROC
@@ -384,7 +406,8 @@ __FW_CALL_IX_TARGET:
 	    ret
 	    ENDP
 	    pop namespace
-#line 31 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 104 "src/lib/arch/cpc/runtime/fwcall.asm"
+#line 36 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/isr.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC interrupt front-end
@@ -419,6 +442,7 @@ __FW_CALL_IX_TARGET:
 	;
 ; Cost: about 250 T-states on top of the firmware's handler, 300 times
 	; a second. See cpcbuild docs/phase4d-design.md.
+#line 64 "src/lib/arch/cpc/runtime/isr.asm"
 	    push namespace core
 	; __CPC_ISR_INSTALL -- points the RAM vector at &0038 to __CPC_ISR,
 	; keeping the original jump target. Call with interrupts off (the
@@ -491,7 +515,8 @@ __CPC_ISR_DIRECT:
 __CPC_ISR_ORIG:
 	    jp   $FFFF              ; patched by __CPC_ISR_INSTALL
 	    pop namespace
-#line 32 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 143 "src/lib/arch/cpc/runtime/isr.asm"
+#line 37 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/colour.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC -- Spectrum colours to pens, and the per-mode screen
@@ -581,7 +606,7 @@ __INK_TO_PEN:
 	    pop  hl
 	    ret
 	    pop namespace
-#line 33 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 38 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    push namespace core
 	; CPC_INIT_00_BOOTSTRAP -- captures FW_BC, zero-fills the private
 	; runtime block ($9E00-$A1FF, .core.CPC_PRIV_BASE for
@@ -699,14 +724,15 @@ __CPC_WAIT_KEY:
 ; Firmware entries called: MC_PRINT_CHAR (&BD2B) in printer-echo builds;
 ; KM_READ_CHAR/KM_WAIT_KEY otherwise. Registers clobbered: none (never
 	; returns).
-#line 171 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 176 "src/lib/arch/cpc/runtime/bootstrap.asm"
 __CPC_END:
-#line 198 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 203 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    call __CPC_WAIT_KEY
 	    di
 	    rst  0
-#line 202 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 207 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    pop namespace
+#line 210 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 25 "tests/functional/arch/cpc/cpc_graphics.bas"
 #line 1 "src/lib/arch/cpc/runtime/circle.asm"
 	; -----------------------------------------------------------------------
@@ -971,6 +997,7 @@ __CIRC_PT:
 	; doesn't depend on whether PRINT is used elsewhere (if it isn't, this
 	; file is never linked in at all), so the ___PRINT_IS_USED___ branch
 	; zx48k has is dropped.
+#line 25 "src/lib/arch/cpc/runtime/copy_attr.asm"
 	    push namespace core
 COPY_ATTR:
 	    ; Copies current permanent attribs into temporary attribs, then
@@ -997,6 +1024,7 @@ __REFRESH_TMP:
 	    ld (hl), a
 	    ret
 	    ENDP
+#line 70 "src/lib/arch/cpc/runtime/copy_attr.asm"
 	; Applies ATTR_T's ink/paper (Spectrum colours, mapped to pens of the
 	; current mode by colour.asm's __INK_TO_PEN) and P_FLAG's temporary INVERSE bit
 	; (bit 2) to the firmware's current pen/paper. Always re-derives both
@@ -1033,6 +1061,7 @@ __SET_ATTR_MODE:
 __SAM_NOINV:
 	    ret
 	    ENDP
+#line 111 "src/lib/arch/cpc/runtime/copy_attr.asm"
 	    pop namespace
 #line 27 "tests/functional/arch/cpc/cpc_graphics.bas"
 #line 1 "src/lib/arch/cpc/runtime/draw.asm"

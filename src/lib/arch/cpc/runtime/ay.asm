@@ -26,6 +26,10 @@
 ; also queue firmware sounds. Call SOUND_RESET (&BCA7) once first to make
 ; the manager idle (Play does).
 ;
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware sound manager,
+; so nothing else writes the AY; BEEP, Play, the music player and these
+; routines are the only users (one at a time).
+;
 ; Cost (CPC "NOP" units of 1 us, every instruction rounded up to a whole
 ; number of them; IN/OUT are 4): __CPC_AY_WRITE 53 us plus 5 for the CALL,
 ; 58 us measured (tests/stress/play_tempo.bas). The DI variants add the
@@ -123,5 +127,34 @@ __CPC_AY_READ_DI:
     call __CPC_AY_READ
     ei
     ret
+
+#ifdef CPC_BAREMETAL
+; __CPC_AY_SILENCE -- silences the chip: volumes of channels A-C 0 (also
+; ends a hardware envelope use), mixer &3F (tone and noise off on all
+; channels, I/O port bits kept as input). Bare-metal mode only (BEEP,
+; Play, MusicInit and SoundStop); firmware mode uses SOUND_RESET instead.
+; Returns with interrupts on.
+; Firmware entries called: none.
+; Registers clobbered: AF, BC, DE.
+__CPC_AY_SILENCE:
+    PROC
+    LOCAL __AS_LOOP
+    di
+    ld   a, 8
+__AS_LOOP:
+    ld   c, 0
+    push af
+    call __CPC_AY_WRITE     ; volume of A, B, C (registers 8-10) = 0
+    pop  af
+    inc  a
+    cp   11
+    jr   nz, __AS_LOOP
+    ld   a, 7
+    ld   c, $3F
+    call __CPC_AY_WRITE     ; mixer: everything off
+    ei
+    ret
+    ENDP
+#endif
 
     pop namespace

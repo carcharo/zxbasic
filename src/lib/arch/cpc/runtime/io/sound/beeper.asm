@@ -17,6 +17,90 @@
 ; (direct AY access, Phase 4d) must not also use BEEP (the plan's
 ; "one owner of the AY" rule).
 
+#ifdef CPC_BAREMETAL
+
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware sound manager,
+; so __CPC_TONE drives the AY itself. The tone period is the same number
+; as above (62500 / frequency); the duration (1/100 s) is turned into
+; whole frames, (duration + 1) / 2, counted on FH_FRAMES (the interrupt
+; handler's frame counter, so interrupts must be on, as in all compiled
+; code). BEEP is blocking, as on the Spectrum: it waits for the next
+; frame boundary (so the tone is exactly n frames long), switches
+; channel A on at full volume, waits, and silences the chip again.
+;
+; Hardware used: the AY-3-8912 through the PPI (runtime/ay.asm, a short
+; interrupts-off section per register write): registers 0-1 (tone A
+; period), 7 (mixer: tone A only), 8 (volume A = 15), and afterwards
+; 8-10 = 0 and 7 = &3F (everything off). A program using BEEP must not
+; run the music player or Play at the same time (one owner of the AY).
+
+#include once <sysvars.asm>
+#include once <ay.asm>
+#include once <waitframes.asm>
+
+    push namespace core
+
+; __BEEPER -- the compiler's constant-BEEP entry: tone period pushed,
+; duration (1/100 s) in HL.
+__BEEPER:
+    ex   de, hl             ; DE = duration
+    pop  hl                 ; return address
+    ex   (sp), hl           ; HL = period; return address back on top
+
+; __CPC_TONE -- HL = tone period, DE = duration in 1/100 s. A zero
+; duration plays nothing. The period is clamped to the AY's 1-4095.
+; Firmware entries called: none.
+; Registers clobbered: AF, BC, DE, HL.
+__CPC_TONE:
+    PROC
+    LOCAL __T_PER_HI, __T_PER_OK, __T_DUR
+
+    ld   a, d
+    or   e
+    ret  z
+    ld   a, h
+    and  $F0
+    jr   z, __T_PER_HI
+    ld   hl, 4095
+__T_PER_HI:
+    ld   a, h
+    or   l
+    jr   nz, __T_PER_OK
+    inc  hl
+__T_PER_OK:
+    srl  d
+    rr   e                  ; DE = duration / 2
+    jr   nc, __T_DUR
+    inc  de                 ; rounded up to whole frames
+__T_DUR:
+    push hl                 ; period
+    push de                 ; frames
+    ld   bc, 1
+    call __CPC_WAIT_FRAMES  ; start on a frame boundary
+    pop  bc                 ; frames
+    pop  hl                 ; period (the AY writes keep HL)
+    push bc
+    xor  a
+    ld   c, l
+    call __CPC_AY_WRITE_DI  ; register 0: period low
+    ld   a, 1
+    ld   c, h
+    call __CPC_AY_WRITE_DI  ; register 1: period high
+    ld   a, 7
+    ld   c, $3E
+    call __CPC_AY_WRITE_DI  ; mixer: tone A only
+    ld   a, 8
+    ld   c, 15
+    call __CPC_AY_WRITE_DI  ; volume A: full, no envelope
+    pop  bc
+    call __CPC_WAIT_FRAMES
+    jp   __CPC_AY_SILENCE
+    ENDP
+
+    pop namespace
+
+#else
+
 #include once <fwcall.asm>
 #include once <sysvars.asm>
 
@@ -85,3 +169,5 @@ __T_WAIT:                       ; until channel A is idle and empty
     ENDP
 
     pop namespace
+
+#endif

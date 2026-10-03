@@ -14,9 +14,25 @@
 
 #include once <colour.asm>
 #include once <fwcall.asm>
+#ifdef CPC_BAREMETAL
+#include once <gacolour.asm>
+#include once <sysvars.asm>
+#endif
 
     push namespace core
 
+#ifdef CPC_BAREMETAL
+; Bare-metal mode: the pen's colour comes from PAL_SHADOW (gacolour.asm
+; keeps every colour it writes) and goes to the Gate Array's border.
+; Firmware entries called: none. Registers clobbered: AF, BC, HL.
+BORDER:
+    call __INK_TO_PEN
+    ld   hl, PAL_SHADOW
+    add  a, l
+    ld   l, a
+    ld   a, (hl)            ; the pen's firmware colour 0-26
+    jp   __CPC_SET_BORDER
+#else
 BORDER:
     call __INK_TO_PEN
     call .core.__FW_CALL
@@ -24,5 +40,6 @@ BORDER:
     call .core.__FW_CALL
     defw $BC38              ; SCR_SET_BORDER
     ret
+#endif
 
     pop namespace

@@ -88,7 +88,7 @@ __KS_LOOP:
 
 #ifndef CPC_BAREMETAL
 ; (Bare-metal mode: the translation below uses the firmware's tables;
-; bare mode has its own -- Phase 6 B3.)
+; bare mode has its own, with the same entry points: kbare.asm.)
 ; __CPC_KEYCHAR -- the character the firmware's own key translation
 ; gives a key. Respects the machine's layout (KEY tables set with
 ; KM_SET_TRANSLATE and friends), the shift lock and the caps lock.

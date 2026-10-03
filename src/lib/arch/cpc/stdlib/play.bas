@@ -46,6 +46,12 @@
 '      and leaves the result in _Play_BenchTicks.
 '   7. The final `ei` is kept: compiled cpc code runs with interrupts on.
 '   8. Documentation comments about the CPU speed and sound ownership.
+'   9. Bare-metal mode (-D CPC_BAREMETAL, Phase 6): there is no firmware
+'      sound manager, so the SOUND_RESET call of change 5 is replaced by
+'      silencing the AY directly (runtime/ay.asm's __CPC_AY_SILENCE);
+'      everything else is the same, Play only ever wrote the AY itself.
+'      _PLAY_BENCHMARK_MODE needs the firmware's clock: a compile error
+'      in bare mode.
 '
 ' Not changed: the MML parser, the note length table, the noise-period
 ' formula (taken from the Spectrum ROM; it only maps a note to a noise
@@ -237,6 +243,11 @@ dim _Play_ContextPtr as uinteger
 ' high byte of AF, which the helper pops). The helper must run with interrupts off (see the header); in benchmark mode
 ' (interrupts on) it uses the DI variant. Firmware entries called: none. Clobbers AF, BC, DE.
 ' (The compiler warns that FASTCALL with 2 parameters and unused parameters: false positives, like for `Wait`.)
+#ifdef CPC_BAREMETAL
+#ifdef _PLAY_BENCHMARK_MODE
+#error "Play: _PLAY_BENCHMARK_MODE needs the firmware's 300 Hz clock; not available with -D CPC_BAREMETAL"
+#endif
+#endif
 #ifndef _PLAY_BENCHMARK_MODE
     sub fastcall _Play_AyWrite(reg as ubyte, value as ubyte)
         asm
@@ -489,10 +500,17 @@ sub Play(channel0 as string, channel1 as string = "", channel2 as string = "")
     ' (cpc) SOUND_RESET (firmware &BCA7) first, so the firmware sound manager is idle and stops writing the AY from the
     ' interrupt handler; then, unless benchmarking, interrupts off for the whole piece (every AY write is below).
     ' The firmware gate returns with interrupts on, so the `di` has to come after it.
+    #ifdef CPC_BAREMETAL
+    ' Bare-metal mode: no firmware sound manager; just silence the chip (volumes 0, mixer all off).
+    asm
+        call .core.__CPC_AY_SILENCE
+    end asm
+    #else
     asm
         call .core.__FW_CALL
         defw $BCA7
     end asm
+    #endif
 
     #ifndef _PLAY_BENCHMARK_MODE
         asm
@@ -767,7 +785,9 @@ sub Play(channel0 as string, channel1 as string = "", channel2 as string = "")
     end asm
 end sub
 
+#ifndef CPC_BAREMETAL
 #require "fwcall.asm"
+#endif
 #require "ay.asm"
 
 #pragma pop(explicit)

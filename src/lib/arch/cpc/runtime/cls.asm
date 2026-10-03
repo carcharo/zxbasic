@@ -12,16 +12,31 @@
 #include once <colour.asm>
 #include once <fwcall.asm>
 #include once <sysvars.asm>
+#ifdef CPC_BAREMETAL
+#include once <txtbare.asm>
+#endif
 
     push namespace core
 
 CLS:
+    PROC
+#ifdef CPC_BAREMETAL
+    ; Bare-metal mode: fill the text rows with the permanent paper's pen
+    ; (txtbare.asm) and home the cursor. No firmware entry is called.
+    ; Registers clobbered: AF, BC, DE, HL.
+    ld a, (ATTR_P)
+    rrca
+    rrca
+    rrca                   ; paper: bits 3-5 of ATTR_P -> bits 0-2
+    call __INK_TO_PEN
+    call __BT_PENMASK      ; the screen byte of an all-paper row
+    jp __BT_CLEAR
+#else
     ; Firmware entries called (via the gate): TXT_SET_PAPER (&BB96, A =
     ; paper pen) then TXT_CLEAR_WINDOW (&BB6C), which clears the
     ; current window with that paper and homes the cursor to its
     ; top-left corner (0,0 for the default full-screen window).
     ; Registers clobbered: AF, HL (main); BC', DE', HL', AF' (the gate).
-    PROC
 
     ld a, (ATTR_P)
     rrca
@@ -35,6 +50,7 @@ CLS:
     defw $BB6C               ; TXT_CLEAR_WINDOW
 
     ret
+#endif
 
     ENDP
 
