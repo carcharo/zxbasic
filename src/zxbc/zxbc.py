@@ -158,6 +158,16 @@ def main(args=None, emitter=None) -> int:
     arch.target.Translator.reset()
     backend = arch.target.backend.Backend()
     backend.init()  # Must reinitialize it again
+
+    # A backend's UNSUPPORTED_OPTIONS ({option: reason}, empty by default)
+    # lists options that can't be enabled on that architecture. Checked on
+    # the command-line value itself: backend.init() may reset the option,
+    # and OPTIONS can still hold a previous in-process compile's value.
+    for option, reason in getattr(backend, "UNSUPPORTED_OPTIONS", {}).items():
+        if getattr(options, option, None):
+            errmsg.error(0, reason, fname=options.PROGRAM)
+    if gl.has_errors:
+        return 1
     # endregion
 
     args = [options.PROGRAM]  # Strip out other options, because they're already set in the OPTIONS container

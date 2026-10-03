@@ -65,10 +65,19 @@ class Backend(Z80Backend):
         ),
     }
 
+    # Options that must not be enabled on this arch -> why (reported as a
+    # compile error by zxbc for -N and by the parser for #pragma).
+    UNSUPPORTED_OPTIONS = {
+        "zxnext": "zxnext (Z80N opcodes) is not available on --arch cpc: the CPC's Z80 can't run them",
+    }
+
     def init(self):
         super().init()
 
         # ZXNext asm is a zx48k/zxnext concept; the CPC never enables it.
+        # Reset here so a value left by a previous in-process compile (e.g.
+        # --arch zxnext) can't leak in; asking for it on cpc (-N or the
+        # pragma) is reported as an error via UNSUPPORTED_OPTIONS.
         OPTIONS.zxnext = False
 
         # bootstrap.asm (and, transitively, sysvars.asm) must run

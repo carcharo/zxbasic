@@ -2859,6 +2859,10 @@ class ZXBasicTransformer(Transformer):
         p0 = None
         try:
             setattr(OPTIONS, items[1], items[3])
+            reason = getattr(arch.target.backend.Backend, "UNSUPPORTED_OPTIONS", {}).get(items[1])
+            if reason and OPTIONS[items[1]].value:
+                errmsg.error(get_lineno(items[1]), reason)
+                OPTIONS[items[1]].value = False
         except src.api.options.UndefinedOptionError:
             errmsg.warning_ignoring_unknown_pragma(get_lineno(items[1]), items[1])
         return p0
