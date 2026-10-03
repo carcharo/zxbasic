@@ -1,0 +1,3050 @@
+	org 4096
+	.core.CPC_PRIV_BASE EQU 40448
+	.core.CPC_PRIV_SIZE EQU 1024
+	.core.CPC_STACK_TOP EQU 42496
+	.core.CPC_MEM_TOP EQU 42619
+.core.__START_PROGRAM:
+	di
+	ld sp, .core.CPC_STACK_TOP
+	call .core.CPC_INIT_00_BOOTSTRAP
+	call .core.__MEM_INIT
+	jp .core.__MAIN_PROGRAM__
+.core.ZXBASIC_USER_DATA:
+	; Defines HEAP SIZE
+.core.ZXBASIC_HEAP_SIZE EQU 4768
+	; Defines HEAP ADDRESS
+.core.ZXBASIC_MEM_HEAP EQU 35680
+	; Defines USER DATA Length in bytes
+.core.ZXBASIC_USER_DATA_LEN EQU .core.ZXBASIC_USER_DATA_END - .core.ZXBASIC_USER_DATA
+	.core.__LABEL__.ZXBASIC_USER_DATA_LEN EQU .core.ZXBASIC_USER_DATA_LEN
+	.core.__LABEL__.ZXBASIC_USER_DATA EQU .core.ZXBASIC_USER_DATA
+_x:
+	DEFB 00
+_y:
+	DEFB 00
+.core.ZXBASIC_USER_DATA_END:
+.core.__MAIN_PROGRAM__:
+	ld a, 3
+	call .core.__READ
+	ld (_x), a
+	ld a, 3
+	call .core.__READ
+	ld (_y), a
+	ld hl, .DATA.__DATA__0
+	call .core.__RESTORE
+	ld a, 3
+	call .core.__READ
+	ld (_x), a
+	call .core.COPY_ATTR
+	ld a, (_x)
+	call .core.__PRINTU8
+	ld a, (_y)
+	call .core.__PRINTU8
+	call .core.PRINT_EOL
+	ld hl, 0
+	ld b, h
+	ld c, l
+.core.__END_PROGRAM:
+	jp .core.__CPC_END
+.DATA.__DATA__0:
+	DEFB 3
+	DEFB 1
+	DEFB 3
+	DEFB 2
+	DEFB 3
+	DEFB 3
+__DATA__END:
+	DEFB 00h
+	;; --- end of user code ---
+#line 1 "src/lib/arch/cpc/runtime/bootstrap.asm"
+	; -----------------------------------------------------------------------
+	; Amstrad CPC bootstrap -- captures FW_BC, initialises the private
+	; runtime block's sysvars, and sets the initial screen mode
+	;
+	; Registered with #init, so the compiler inserts
+	; "call .core.CPC_INIT_00_BOOTSTRAP" in the prologue (src/arch/cpc/
+	; backend/main.py's emit_prologue()).
+	;
+	; Forced into every program via common.REQUIRES (backend/main.py's
+; Backend.init()) rather than pulled in transitively: this must run
+	; even in programs with no PRINT/arrays/etc. that would otherwise never
+	; #include sysvars.asm.
+	;
+; Naming: #init calls are emitted in sorted label order (sorted() over
+	; the raw strings passed to every #init directive -- see
+	; src/arch/z80/backend/main.py's emit_prologue and
+	; src/zxbc/zxbparser.py's preproc_line_init). FW_BC must be captured from
+	; the live BC' before anything else can disturb it (see fwcall.asm's
+	; header), which means this routine must be the first #init call, full
+	; stop -- not just first among the cpc runtime's own files, but first
+	; against anything any future #include might add. ".core.CPC_INIT_FP_CALC"
+	; (fp_calc.asm) would otherwise sort before ".core.CPC_INIT_SYSVARS" (F <
+; S), so the routine is named CPC_INIT_00_BOOTSTRAP: the "00_" digit
+	; prefix sorts before any plausible future "CPC_INIT_<LETTER>..." name
+	; (digits are below uppercase letters in ASCII), which is a stronger
+	; guarantee than just renaming past today's one clash. Nothing else
+	; references the old CPC_INIT_SYSVARS name.
+#line 1 "src/lib/arch/cpc/runtime/sysvars.asm"
+	; -----------------------------------------------------------------------
+	; Amstrad CPC system variables
+	;
+	; zx48k's own sysvars.asm and the runtime files ported from it hard-code
+	; Spectrum sysvar addresses ($5C00-$5CB5), which are ordinary program RAM
+	; on the CPC (inside the code/data area, $1000 up); using them as-is would
+	; silently corrupt the compiled program. This file relocates them into the
+	; private runtime block instead ($9E00-$A1FF, 1 KB -- see
+	; .core.CPC_PRIV_BASE / CPC_PRIV_SIZE, emitted as EQUs by
+	; src/arch/cpc/backend/main.py's prologue).
+	;
+	; This file only defines the *names and offsets*; CPC_INIT_00_BOOTSTRAP
+	; (bootstrap.asm) fills them in at runtime.
+	;
+; Layout ($9E00 + offset), all byte offsets from SYSVAR_BASE:
+	;
+	;   Offset  Size  Name               Note
+	;   ------  ----  -----------------  ---------------------------------
+	;   $00     2     CHARS              pointer to charset (8x8 cells);
+	;                                     unused by print.asm now (the
+	;                                     firmware draws its own glyphs) but
+	;                                     kept for zx48k source parity
+	;   $02     2     UDG                pointer to UDG charset (ditto)
+	;   $04     2     COORDS             last PLOT/graphics coords (X,Y)
+	;   $06     1     FLAGS2             screen flags (OVER/BOLD/ITALIC)
+	;   $07     1     ECHO_E             reserved, unused for now
+	;   $08     2     DFCC               unused by print.asm now (no VRAM
+	;                                     pointer to track -- the firmware
+	;                                     owns screen addressing); kept so
+	;                                     any stray reference still assembles
+	;   $0A     2     DFCCL              ditto, unused
+;   $0C     2     S_POSN             vestigial: __LOAD_S_POSN/
+	;                                     __SAVE_S_POSN (sposn.asm) now read
+	;                                     the firmware's own live cursor via
+	;                                     TXT_GET_CURSOR/TXT_SET_CURSOR
+	;                                     instead of caching it here. Kept
+	;                                     zeroed by bootstrap.asm; nothing
+	;                                     reads or writes it any more
+	;   $0E     1     ATTR_P             permanent attribute (INK/PAPER/etc.)
+	;   $0F     1     MASK_P             permanent transparency mask -- kept
+	;                                     immediately after ATTR_P because
+	;                                     ink.asm/paper.asm/bright.asm/
+	;                                     flash.asm (byte-for-byte zx48k)
+	;                                     reach it with a plain `inc de`/
+	;                                     `inc hl` from ATTR_P
+	;   $10     1     ATTR_T             temporary attribute (same encoding
+	;                                     as ATTR_P; see the bit layout below)
+	;   $11     1     MASK_T             temporary transparency mask, same
+	;                                     adjacency rule as MASK_P
+	;   $12     1     P_FLAG             permanent print flags (OVER/INVERSE)
+	;   $13     1     TV_FLAG            flags controlling output to screen
+	;   $14     8     MEM0               scratch buffer; print.asm reuses it
+	;                                     to stash a control code's first
+	;                                     parameter byte across two
+	;                                     __PRINTCHAR calls (AT's row, TAB's
+	;                                     first byte) now that it doesn't need
+	;                                     it for character bitmap generation
+	;   $1C     2     SCREEN_ADDR        pointer to the screen bitmap base
+	;   $1E     2     SCREEN_ATTR_ADDR   placeholder -- the CPC has no
+	;                                    per-cell attribute byte in memory
+	;                                    the way the Spectrum does
+	;   $20     1     ERR_NR             error code (-1 = no error)
+	;   $21     2     FRAMES             software frame counter
+	;   $23     2     RANDOM_SEED_LOW    RNG seed, low 16 bits
+	;   $25     8     ARRAY_SCRATCH      LBOUND_PTR/UBOUND_PTR/RET_ADDR/
+	;                                    TMP_ARR_PTR (2 bytes each)
+	;   $2D     2     CHR_SCRATCH        return-address scratch for CHR$()
+	;   $2F     4     DIVF_SCRATCH       TMP (2B) + ERR_SP (2B) for float
+	;                                    division
+	;   $33     2     FW_BC              firmware's BC' shadow (fwcall.asm's
+	;                                    gate); seeded from the live BC' by
+	;                                    CPC_INIT_00_BOOTSTRAP before
+	;                                    anything else can disturb it
+	;   $35     1     IN_FW              "inside the firmware gate" flag,
+	;                                    set/cleared by fwcall.asm around
+	;                                    every call; for a future IM1
+	;                                    front-end (Sec6.1 stage 2) to tell
+	;                                    a firmware call from user code
+	;   $36     6     MODF16_SCRATCH     return addr + divider DE/HL for
+	;                                    MOD16.16, kept separate from
+	;                                    ARRAY_SCRATCH (the two must not alias)
+	;   $3C     1     PRINT_STATE        print.asm's control-code state
+;                                    machine: 0 = idle, nonzero = "the
+	;                                    next __PRINTCHAR byte is a parameter
+	;                                    for control code N" (see print.asm)
+	;   $3D     2     PPC                current line number, for BREAK
+	;                                    (break.asm); matches zx48k's PPC
+	;                                    23621 by name/role only -- our
+	;                                    error.asm doesn't print it (no ROM
+	;                                    error formatter here), it's kept
+	;                                    only so CHECK_BREAK's calling
+	;                                    convention matches zx48k's exactly
+	;                                    (see break.asm)
+;   $3F     2     FP_STKBOT          fp_calc.asm: base of the FP number
+	;                                    stack (ROM STKBOT $5C63)
+;   $41     2     FP_STKEND          fp_calc.asm: next free slot in the
+	;                                    FP number stack (ROM STKEND $5C65).
+	;                                    MUST stay immediately followed by
+	;                                    FP_BREG -- see the note in
+	;                                    fp_calc.asm (ENT-TABLE loads both
+	;                                    with one `ld bc,(FP_STKEND+1)`)
+;   $43     1     FP_BREG            fp_calc.asm: literal currently being
+	;                                    executed (ROM BREG $5C67)
+;   $44     2     FP_MEM             fp_calc.asm: pointer to the MEM
+	;                                    area, 6 cells of 5 bytes (ROM MEM
+	;                                    $5C68)
+;   $46     60    FP_CALC_STACK      fp_calc.asm: the FP number stack
+	;                                    itself (12 numbers max)
+;   $82     30    FP_MEM_AREA        fp_calc.asm: the MEM area (6 cells)
+;   $A0     8     PEN_MAP            colour.asm: Spectrum colour 0-7 ->
+	;                                    pen of the current screen mode
+;   $A8     1     GFX_XSHIFT         colour.asm: mode pixel x -> firmware
+;                                    virtual x shift (mode 0: 2, 1: 1,
+;                                    2: 0)
+;   $A9     1     TXT_COLS           colour.asm: text columns of the
+	;                                    current mode (20/40/80)
+;   $AA     1     GRA_PEN_CUR        gfx.asm: graphics pen last given to
+	;                                    the firmware ($FF = unknown)
+;   $AB     1     GRA_MODE_CUR       gfx.asm: graphics write mode last
+	;                                    given to the firmware ($FF = unknown)
+;   $AC     9     SOUND_BLK          beep.asm: SOUND_QUEUE block (the
+	;                                    firmware reads it, so it must be in
+	;                                    the central 32K -- it is)
+;   $B5     10    CIRC_VARS          circle.asm: centre X/Y, x, y, d
+;   $BF     1     PAUSE_TICK         pause.asm: last 300 Hz tick count
+;   $C0     1     CB_BASE            cpcbuild/core.asm: high byte of the
+	;                                    screen the library draws on (&C0, or
+	;                                    &40 for the double-buffer back screen)
+;   $C1     1     CB_SHOWN           cpcbuild/core.asm: high byte of the
+	;                                    screen being displayed
+;   $C2     2     CB_OFFSET          cpcbuild/core.asm: the firmware's
+	;                                    hardware-scroll offset, 0-&7FE bytes
+;   $C4     1     CB_DBUF            cpcbuild/core.asm: 1 = double buffering
+;   $C5     2     CB_TILESET         cpcbuild tiles: current tileset
+;   $C7     10    CB_KEYS            cpcbuild keyboard: the last matrix
+;                                    scan, rows 0-9 (bit = 0: pressed)
+;   $D1     16    SND_ENV            fwsound.asm: volume envelope data
+	;                                    buffer for SOUND_AMPL_ENVELOPE
+	;   ------  ----
+	;   $E1     (225 bytes used)
+	;
+	; --- ATTR_P / ATTR_T bit layout (one byte, same shape as zx48k's) ------
+	;
+	;   bit   Meaning
+	;   ---   ------------------------------------------------------------
+;   0-2   ink: a Spectrum colour 0-7 (ink.asm, unchanged from zx48k),
+	;         turned into a pen of the current mode through PEN_MAP
+	;         (colour.asm) whenever it reaches the firmware
+;   3-5   paper: a Spectrum colour 0-7, mapped the same way
+	;   6     BRIGHT flag (bright.asm) -- accepted, ignored (notes.md Q5)
+	;   7     FLASH flag (flash.asm) -- accepted, ignored (notes.md Q5)
+	;
+	; $E1 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
+	; below lets it be compared against .core.CPC_PRIV_SIZE by eye whenever
+	; this table grows.
+	    push namespace core
+	SYSVAR_BASE         EQU .core.CPC_PRIV_BASE
+	CHARS               EQU SYSVAR_BASE + $00   ; DW -- pointer to charset (8x8 cells)
+	UDG                 EQU SYSVAR_BASE + $02   ; DW -- pointer to UDG charset
+	COORDS              EQU SYSVAR_BASE + $04   ; DW -- last PLOT/graphics coordinates (X,Y)
+	FLAGS2              EQU SYSVAR_BASE + $06   ; DB -- screen flags (OVER/BOLD/ITALIC)
+	ECHO_E              EQU SYSVAR_BASE + $07   ; DB -- (reserved, unused for now)
+	DFCC                EQU SYSVAR_BASE + $08   ; DW -- unused (no VRAM pointer to track)
+	DFCCL               EQU SYSVAR_BASE + $0A   ; DW -- unused (ditto)
+	S_POSN              EQU SYSVAR_BASE + $0C   ; DW -- vestigial, see table above
+	ATTR_P              EQU SYSVAR_BASE + $0E   ; DB -- permanent attribute (INK/PAPER/etc.)
+	MASK_P              EQU SYSVAR_BASE + $0F   ; DB -- permanent transparency mask
+	ATTR_T              EQU SYSVAR_BASE + $10   ; DB -- temporary attribute
+	MASK_T              EQU SYSVAR_BASE + $11   ; DB -- temporary transparency mask
+	P_FLAG              EQU SYSVAR_BASE + $12   ; DB -- permanent print flags (OVER/INVERSE)
+	TV_FLAG             EQU SYSVAR_BASE + $13   ; DB -- flags controlling output to screen
+	MEM0                EQU SYSVAR_BASE + $14   ; 8B -- scratch buffer, see table above
+	SCREEN_ADDR         EQU SYSVAR_BASE + $1C   ; DW -- pointer to the screen bitmap base
+	SCREEN_ATTR_ADDR    EQU SYSVAR_BASE + $1E   ; DW -- placeholder, see table above
+	ERR_NR              EQU SYSVAR_BASE + $20   ; DB -- error code (-1 = no error)
+	FRAMES              EQU SYSVAR_BASE + $21   ; DW -- software frame counter
+	RANDOM_SEED_LOW     EQU SYSVAR_BASE + $23   ; DW -- RNG seed, low 16 bits
+	ARRAY_SCRATCH       EQU SYSVAR_BASE + $25   ; 8B -- LBOUND_PTR/UBOUND_PTR/RET_ADDR/TMP_ARR_PTR
+	CHR_SCRATCH         EQU SYSVAR_BASE + $2D   ; 2B -- return-address scratch for CHR$()
+	DIVF_SCRATCH        EQU SYSVAR_BASE + $2F   ; 4B -- TMP (2B) + ERR_SP (2B) for float division
+	FW_BC               EQU SYSVAR_BASE + $33   ; 2B -- firmware's BC' shadow (fwcall.asm)
+	IN_FW               EQU SYSVAR_BASE + $35   ; 1B -- "inside firmware gate" flag (fwcall.asm)
+	MODF16_SCRATCH      EQU SYSVAR_BASE + $36   ; 6B -- return addr + divider DE/HL for MOD16.16
+	PRINT_STATE         EQU SYSVAR_BASE + $3C   ; 1B -- print.asm's control-code state machine
+	PPC                 EQU SYSVAR_BASE + $3D   ; DW -- current line number (break.asm CHECK_BREAK)
+	; --- fp_calc.asm's own sysvars (equivalent to the ROM's STKBOT/STKEND/
+	; BREG/MEM $5C63-$5C69) -- kept contiguous and in this exact order, see
+	; the table above and fp_calc.asm's own header.
+	FP_STKBOT           EQU SYSVAR_BASE + $3F   ; DW -- base of the FP number stack
+	FP_STKEND           EQU SYSVAR_BASE + $41   ; DW -- next free slot in the FP number stack
+	FP_BREG             EQU SYSVAR_BASE + $43   ; DB -- literal currently being executed
+	FP_MEM              EQU SYSVAR_BASE + $44   ; DW -- pointer to the MEM area (6 cells x 5B)
+	FP_CALC_STACK       EQU SYSVAR_BASE + $46   ; 60B -- the FP number stack (12 numbers max)
+	FP_CALC_STACK_END   EQU FP_CALC_STACK + 60
+	FP_MEM_AREA         EQU SYSVAR_BASE + $82   ; 30B -- the MEM area (6 cells x 5B)
+	PEN_MAP             EQU SYSVAR_BASE + $A0   ; 8B -- Spectrum colour -> pen (colour.asm)
+	GFX_XSHIFT          EQU SYSVAR_BASE + $A8   ; DB -- mode pixel x -> virtual x shift
+	TXT_COLS            EQU SYSVAR_BASE + $A9   ; DB -- text columns in the current mode
+	GRA_PEN_CUR         EQU SYSVAR_BASE + $AA   ; DB -- cached graphics pen ($FF = unknown)
+	GRA_MODE_CUR        EQU SYSVAR_BASE + $AB   ; DB -- cached graphics write mode ($FF = unknown)
+	SOUND_BLK           EQU SYSVAR_BASE + $AC   ; 9B -- SOUND_QUEUE block (beep.asm)
+	CIRC_VARS           EQU SYSVAR_BASE + $B5   ; 10B -- CIRCLE state (circle.asm)
+	PAUSE_TICK          EQU SYSVAR_BASE + $BF   ; DB -- PAUSE's last tick count (pause.asm)
+	CB_BASE             EQU SYSVAR_BASE + $C0   ; DB -- screen the library draws on (high byte)
+	CB_SHOWN            EQU SYSVAR_BASE + $C1   ; DB -- screen displayed (high byte)
+	CB_OFFSET           EQU SYSVAR_BASE + $C2   ; DW -- hardware-scroll offset (bytes)
+	CB_DBUF             EQU SYSVAR_BASE + $C4   ; DB -- 1 = double buffering on
+	CB_TILESET          EQU SYSVAR_BASE + $C5   ; DW -- current tileset address
+	CB_KEYS             EQU SYSVAR_BASE + $C7   ; 10B -- keyboard matrix scan
+	SND_ENV             EQU SYSVAR_BASE + $D1   ; 16B -- envelope data buffer (fwsound.asm)
+	CPC_SYSVARS_USED    EQU $E1                 ; bytes used above; compare by eye against
+	                                             ; .core.CPC_PRIV_SIZE when this table grows
+; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
+; The column count follows the screen mode at run time (TXT_COLS above:
+	; 20/40/80); these constants are the boot-time mode 1 values. Only the
+	; row count is the same in every mode.
+	; SCR_COLS keeps zx48k's own "columns + 1" convention (see zx48k's
+; sysvars.asm: SCR_COLS EQU 33 for 32 visible columns). SCR_COLS_VISIBLE
+	; is the plain visible-column count, used by print.asm/sposn.asm's
+	; explicit 0-39 range checks and arithmetic, where the "+1" convention
+	; would just have to be undone again.
+	SCR_COLS            EQU 41      ; columns + 1 (40 columns visible)
+	SCR_COLS_VISIBLE    EQU 40      ; columns visible (0-39, 0-based)
+	SCR_ROWS            EQU 25      ; rows visible (0-24, 0-based)
+	SCR_SIZE            EQU (SCR_ROWS << 8) + SCR_COLS
+	    pop namespace
+#line 30 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 1 "src/lib/arch/cpc/runtime/fwcall.asm"
+	; -----------------------------------------------------------------------
+	; Amstrad CPC firmware call gate
+	;
+	; Every firmware jumpblock entry goes through RST 1 LOW JUMP, which uses
+	; B' = &7F (gate array port) and C' = current ROM/mode config, and the
+	; 300 Hz interrupt handler also uses BC' and branches on AF' carry
+	; ("already inside an interrupt"). Compiled code clobbers both freely
+	; (SUB epilogues pop into BC'; div8/div16/float pushes use AF'). So every
+; firmware call goes through this gate: with interrupts off it sets IN_FW,
+	; restores BC' from the FW_BC shadow and clears AF' carry, makes the call
+	; with interrupts on, then (off again) captures BC' back (mode/ROM
+	; changes) and clears IN_FW. Outside the gate interrupts go through
+	; isr.asm, which does the same register hand-over for the firmware's
+	; interrupt handler; IN_FW tells it the firmware's registers are already
+	; loaded. The gate always returns with interrupts on.
+	;
+	; Usage (A, F, BC, DE, HL go in as set and come back as the firmware left
+; them, flags included):
+	;
+	;     call .core.__FW_CALL        ; or .core.__FW_CALL_IX for CAS_* entries,
+	;     defw $BB5A                  ; which corrupt IX (Boriel's frame pointer)
+	;
+	; Clobbers BC', DE', HL', AF' (never meaningful to compiled code across a
+	; call). Not re-entrant (the interrupt handler never calls it).
+; Cost: about 220 T-states plus the firmware routine.
+	    push namespace core
+__FW_CALL:
+	    PROC
+	    di                  ; IN_FW and BC' must change together (isr.asm)
+	    exx                 ; alternate bank is scratch; caller's regs stay put
+	    pop  hl             ; HL -> defw after the call
+	    ld   e, (hl)
+	    inc  hl
+	    ld   d, (hl)        ; DE = firmware entry
+	    inc  hl
+	    push hl             ; return past the defw
+	    ld   (__FW_CALL_TARGET + 1), de
+	    ld   hl, IN_FW
+	    ld   (hl), 1
+	    ld   bc, (FW_BC)    ; becomes BC' after the exx below
+	    ex   af, af'
+	    or   a              ; AF' carry clear, or the ISR takes its nested path
+	    ex   af, af'
+	    exx
+	    ei
+__FW_CALL_TARGET:
+	    call $FFFF          ; operand patched above
+	    di
+	    exx
+	    ld   (FW_BC), bc    ; keep mode/ROM changes for the next call
+	    ld   hl, IN_FW
+	    ld   (hl), 0
+	    exx
+	    ei
+	    ret
+	    ENDP
+__FW_CALL_IX:
+	    PROC
+	    di
+	    exx
+	    pop  hl
+	    ld   e, (hl)
+	    inc  hl
+	    ld   d, (hl)
+	    inc  hl
+	    push hl
+	    ld   (__FW_CALL_IX_TARGET + 1), de
+	    ld   hl, IN_FW
+	    ld   (hl), 1
+	    ld   bc, (FW_BC)
+	    ex   af, af'
+	    or   a
+	    ex   af, af'
+	    exx
+	    ei
+	    push ix
+__FW_CALL_IX_TARGET:
+	    call $FFFF
+	    pop  ix
+	    di
+	    exx
+	    ld   (FW_BC), bc
+	    ld   hl, IN_FW
+	    ld   (hl), 0
+	    exx
+	    ei
+	    ret
+	    ENDP
+	    pop namespace
+#line 31 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 1 "src/lib/arch/cpc/runtime/isr.asm"
+	; -----------------------------------------------------------------------
+	; Amstrad CPC interrupt front-end
+	;
+	; Compiled code runs with interrupts on. The firmware's 300 Hz handler
+	; needs BC' = its own value (B' = &7F, the Gate Array port; C' = the
+	; ROM/mode configuration) and AF' carry clear (carry set means "interrupt
+	; inside an interrupt"), but compiled code uses the alternate registers
+	; freely (SUB epilogues, 32-bit/float pushes, the FP calculator). So the
+; RAM vector at &0038 is pointed here: this handler saves both register
+	; banks, hands the firmware its BC' (the FW_BC shadow, fwcall.asm) and a
+	; clear AF' carry, runs the original handler, keeps any change it made
+	; to BC', and restores everything.
+	;
+	; The RAM vector is only seen while the lower ROM is off, i.e. while our
+	; code (or firmware code running from RAM) executes. With the lower ROM
+	; on, the ROM's own &0038 goes straight to the firmware.
+	;
+	; Inside a firmware call (IN_FW = 1, set by the gate) the alternate
+	; registers already hold the firmware's values, so the handler jumps
+	; straight to the original. IN_FW also stays 1 while the original runs
+; from here: it ends with "ei; ret", so an interrupt can arrive before
+	; our "di", and the firmware's registers are still loaded then.
+	;
+	; The original handler (RAM &B941 on the 6128, &B939 on the 464; the
+	; same code in both ROMs) is read from the vector at boot.
+	;
+; Cost: about 250 T-states on top of the firmware's handler, 300 times
+	; a second. See cpcbuild docs/phase4d-design.md.
+	    push namespace core
+	; __CPC_ISR_INSTALL -- points the RAM vector at &0038 to __CPC_ISR,
+	; keeping the original jump target. Call with interrupts off (the
+	; bootstrap does, before its first firmware call).
+; Firmware entries called: none. Registers clobbered: AF, HL.
+__CPC_ISR_INSTALL:
+	    ld   hl, ($0039)
+	    ld   (__CPC_ISR_ORIG + 1), hl
+	    ld   a, $C3             ; JP nn
+	    ld   ($0038), a
+	    ld   hl, __CPC_ISR
+	    ld   ($0039), hl
+	    ret
+	; __CPC_ISR -- the IM 1 handler (entered with interrupts off).
+; Registers clobbered: none.
+__CPC_ISR:
+	    push af
+	    ld   a, (IN_FW)
+	    or   a
+	    jr   nz, __CPC_ISR_DIRECT
+	    inc  a
+	    ld   (IN_FW), a         ; an interrupt during the chain goes direct
+	    push bc
+	    push de
+	    push hl
+	    push ix                 ; event routines may use IX/IY
+	    push iy
+	    ex   af, af'
+	    push af                 ; the program's AF'
+	    exx
+	    push bc                 ; the program's BC', DE', HL'
+	    push de
+	    push hl
+	    ld   bc, (FW_BC)        ; the firmware's BC'
+	    exx
+	    or   a                  ; AF' (active now) carry clear
+	    ex   af, af'
+	    call __CPC_ISR_ORIG     ; returns with interrupts on
+	    di
+	    exx
+	    ld   (FW_BC), bc        ; keep a ROM/mode change
+	    pop  hl
+	    pop  de
+	    pop  bc
+	    exx
+	    pop  af
+	    ex   af, af'            ; the program's AF' back
+	    pop  iy
+	    pop  ix
+	    pop  hl
+	    pop  de
+	    pop  bc
+	    xor  a
+	    ld   (IN_FW), a
+	    pop  af
+	    ei
+	    ret
+__CPC_ISR_DIRECT:
+	    pop  af
+__CPC_ISR_ORIG:
+	    jp   $FFFF              ; patched by __CPC_ISR_INSTALL
+	    pop namespace
+#line 32 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 1 "src/lib/arch/cpc/runtime/colour.asm"
+	; -----------------------------------------------------------------------
+	; Amstrad CPC -- Spectrum colours to pens, and the per-mode screen
+	; variables (cpcbuild/docs/notes.md, 2026-10-01, question 4)
+	;
+	; INK/PAPER/BORDER take Spectrum colours 0-7 (black, blue, red,
+	; magenta, green, cyan, yellow, white). A CPC mode has 2, 4 or 16 pens
+	; instead, so each colour goes through PEN_MAP, a fixed per-mode table
+; picking the pen whose *firmware default* colour is nearest:
+	;
+	;   Spectrum   0  1  2  3  4  5  6  7
+;   mode 0     5  6  3  7 12  2  1  4   exact: black, bright blue, bright
+	;                                       red, bright magenta, bright green,
+	;                                       bright cyan, bright yellow,
+	;                                       bright white
+	;   mode 1     0  0  3  3  2  2  1  1   blue, yellow, cyan, red palette
+	;   mode 2     0  0  0  0  1  1  1  1   blue, yellow palette (by brightness)
+	;
+	; So the default "white on black" is the CPC's own yellow on blue in
+	; mode 1. SetInk (cpc.bas) changes a pen's colour, not this table.
+	;
+	; The same mode switch also sets GFX_XSHIFT (mode pixels to firmware
+	; virtual coordinates, gfx.asm) and TXT_COLS (print.asm/sposn.asm), and
+	; forgets the graphics pen/write-mode cache (gfx.asm), since the
+	; firmware's mode change resets its graphics state.
+	    push namespace core
+	; __CPC_SET_MODE_VARS -- A = screen mode (0-3; 3 is the undocumented
+	; 4-pen 160x200 hardware mode, treated as mode 0 geometry with mode 1
+	; pens). Loads PEN_MAP, GFX_XSHIFT and TXT_COLS for that mode and marks
+	; the graphics pen/mode cache unknown. Called by the bootstrap (mode 1)
+	; and by cpc.bas's Mode after SCR_SET_MODE.
+; Firmware entry called: none (memory only).
+; Registers clobbered: AF, BC, DE, HL.
+__CPC_SET_MODE_VARS:
+	    PROC
+	    LOCAL __SMV_MAPS, __SMV_PARAMS
+	    and  3
+	    ld   l, a
+	    ld   h, 0
+	    add  hl, hl
+	    add  hl, hl
+	    add  hl, hl             ; HL = mode * 8
+	    ld   de, __SMV_MAPS
+	    add  hl, de
+	    ld   de, PEN_MAP
+	    ld   bc, 8
+	    ldir                    ; A (the mode) survives
+	    add  a, a
+	    ld   e, a
+	    ld   d, 0
+	    ld   hl, __SMV_PARAMS
+	    add  hl, de
+	    ld   a, (hl)
+	    ld   (GFX_XSHIFT), a
+	    inc  hl
+	    ld   a, (hl)
+	    ld   (TXT_COLS), a
+	    ld   a, $FF
+	    ld   (GRA_PEN_CUR), a
+	    ld   (GRA_MODE_CUR), a
+	    ret
+__SMV_MAPS:
+	    DEFB 5, 6, 3, 7, 12, 2, 1, 4    ; mode 0
+	    DEFB 0, 0, 3, 3, 2, 2, 1, 1     ; mode 1
+	    DEFB 0, 0, 0, 0, 1, 1, 1, 1     ; mode 2
+	    DEFB 0, 0, 3, 3, 2, 2, 1, 1     ; mode 3
+__SMV_PARAMS:                       ; GFX_XSHIFT, TXT_COLS
+    DEFB 2, 20                      ; mode 0: 160 pixels, 20 columns
+    DEFB 1, 40                      ; mode 1: 320 pixels, 40 columns
+    DEFB 0, 80                      ; mode 2: 640 pixels, 80 columns
+	    DEFB 2, 20                      ; mode 3
+	    ENDP
+	; __INK_TO_PEN -- A = Spectrum colour (bits 0-2 used) -> A = pen of the
+	; current mode.
+; Firmware entry called: none.
+; Registers clobbered: AF.
+__INK_TO_PEN:
+	    push hl
+	    and  7
+	    ld   hl, PEN_MAP
+	    add  a, l
+	    ld   l, a
+	    adc  a, h
+	    sub  l
+	    ld   h, a
+	    ld   a, (hl)
+	    pop  hl
+	    ret
+	    pop namespace
+#line 33 "src/lib/arch/cpc/runtime/bootstrap.asm"
+	    push namespace core
+	; CPC_INIT_00_BOOTSTRAP -- captures FW_BC, zero-fills the private
+	; runtime block ($9E00-$A1FF, .core.CPC_PRIV_BASE for
+	; .core.CPC_PRIV_SIZE bytes), installs the interrupt front-end, sets the
+	; few sysvars that need a non-zero default, then sets screen MODE 1
+	; through the firmware gate (which turns interrupts on for good).
+	;
+	; FW_BC is captured first, before the zero-fill, but can't be written
+	; to its sysvar slot yet -- that slot is about to be zeroed along with
+; the rest of the block. So it's parked on the stack (already valid:
+	; the prologue sets SP before calling #init routines) and only written
+	; out to FW_BC once the zero-fill is done.
+	;
+; Firmware entry called: SCR_SET_MODE (&BC0E, via the gate, once
+	; FW_BC/IN_FW exist) -- see fwcall.asm for what that call clobbers.
+; Registers clobbered: AF, BC, DE, HL (and, transiently, BC'/DE'/HL').
+CPC_INIT_00_BOOTSTRAP:
+	    PROC
+	    ; Capture the firmware's BC' immediately -- see the header above
+	    ; and fwcall.asm's contract. Parked on the stack, not yet in FW_BC.
+	    exx
+	    push bc
+	    exx
+	    ; Zero-fill the whole private block; sysvars set below simply
+	    ; overwrite their own zeroed slot. This also zeroes FW_BC's and
+	    ; IN_FW's slots -- the captured value is still safe on the stack.
+	    ld   hl, .core.CPC_PRIV_BASE
+	    ld   (hl), 0
+	    ld   de, .core.CPC_PRIV_BASE + 1
+	    ld   bc, .core.CPC_PRIV_SIZE - 1
+	    ldir
+	    ; Now write the captured FW_BC out to its (freshly-zeroed) slot.
+	    ; IN_FW stays 0, which the zero-fill already set.
+	    pop  bc
+	    ld   (FW_BC), bc
+	    ; Our interrupt front-end (isr.asm) goes in before anything enables
+    ; interrupts: the first firmware call below returns with them on,
+	    ; and they stay on from then on.
+	    call __CPC_ISR_INSTALL
+    ; ERR_NR: -1 means "no error", not 0 (matches the ZX Spectrum manual's
+	    ; convention).
+	    ld   a, $FF
+	    ld   (ERR_NR), a
+    ; Initial permanent attribute: INK 7 / PAPER 0 (white on black), which
+	    ; colour.asm maps to the firmware's own default pens, pen 1 on pen 0
+	    ; in mode 1 (yellow on blue). Set here, not by print.asm, because
+	    ; PLOT/DRAW/CIRCLE use it too in programs that never PRINT; left at 0
+	    ; it would be black on black, i.e. invisible.
+	    ld   a, 7
+	    ld   (ATTR_P), a
+    ; SCREEN_ADDR: mode 1 screen base. SCREEN_ATTR_ADDR is left zeroed --
+	    ; see the placeholder note in sysvars.asm.
+	    ld   hl, $C000
+	    ld   (SCREEN_ADDR), hl
+	    ; Cursor at the top-left of the text window.
+	    ld   hl, 0
+	    ld   (S_POSN), hl
+	    ; Screen mode 1 (40x25, 4 colours). SCR_SET_MODE also resets the
+	    ; text/graphics windows to full-screen, the graphics origin, and
+	    ; the current stream -- and, confirmed in the emulator (see
+	    ; cpc-port-notes.md Phase 2 results), clears the screen and homes
+	    ; the firmware's own text cursor, even though the Firmware Guide's
+	    ; own entry for &BC0E doesn't spell that out explicitly.
+	    ld   a, 1
+	    call .core.__FW_CALL
+	    defw $BC0E
+	    ld   a, 1
+    call __CPC_SET_MODE_VARS    ; colour.asm: pen map, widths for mode 1
+    ; Empty the key buffer: the RETURN that submitted RUN"<prog> can
+	    ; still be in it, and the first INKEY$ or PAUSE would see it.
+	    jp   __CPC_FLUSH_KEYS
+	    ENDP
+	; __CPC_FLUSH_KEYS -- discards every character waiting in the firmware's
+	; key buffer. KM_FLUSH (&BD3D) does this on the 664/6128 only, so this
+	; reads characters with KM_READ_CHAR (&BB09, every model) until it
+	; reports none (Carry clear).
+; Registers clobbered: AF (main); BC', DE', HL', AF' (the gate).
+__CPC_FLUSH_KEYS:
+	    call .core.__FW_CALL
+	    defw $BB09
+	    jr   c, __CPC_FLUSH_KEYS
+	    ret
+	; __CPC_WAIT_KEY -- flushes stale keys, then waits for a new keypress
+	; (KM_WAIT_KEY, &BB18). END and runtime errors use it so the program's
+	; last screen stays visible until a key is pressed (notes.md question 1).
+; Registers clobbered: AF (main); BC', DE', HL', AF' (the gate).
+__CPC_WAIT_KEY:
+	    call __CPC_FLUSH_KEYS
+	    call .core.__FW_CALL
+	    defw $BB18
+	    ret
+	; __CPC_END -- the single choke point for a *clean* END (src/arch/cpc/
+	; backend/generic.py's _end emits "jp .core.__CPC_END" for every END in
+	; the program, instead of a bare RST 0). Reaching address 0 by itself
+; doesn't prove the program reached END: a crash that happens to reset
+	; the machine, or a runtime error (error.asm's __ERROR, also RST 0 after
+	; printing "Error n"), lands there too. This is forced into every build
+	; (bootstrap.asm is in common.REQUIRES unconditionally -- see the file
+	; header), so it's the one place a distinguishing marker can live for
+	; every program, not just ones that happen to #include some other file.
+	;
+	; Under -D __CPC_PRINTER_ECHO__ (cpcbuild's cpcrun.py test harness),
+	; sends __CPC_END_MARKER -- a line containing only "\x04END" -- to the
+	; printer via MC_PRINT_CHAR (&BD2B), through the gate, before the RST 0.
+	; \x04 (ASCII EOT) as the first byte makes the line unlike anything a
+	; Boriel program can PRINT (print.asm's control-code table drops or
+	; diverts every code below 32 except 6/8/13-23) and unlike the
+	; "NOT IMPLEMENTED" (stub.asm) / "Error n" (error.asm) text the same
+	; transcript can otherwise contain, so cpcrun.py can grep for it
+	; unambiguously and strip it from the reported transcript.
+	;
+	; Without the flag it waits for a key first (__CPC_WAIT_KEY), so the
+	; program's output stays on screen (notes.md question 1), then resets.
+	;
+; Firmware entries called: MC_PRINT_CHAR (&BD2B) in printer-echo builds;
+; KM_READ_CHAR/KM_WAIT_KEY otherwise. Registers clobbered: none (never
+	; returns).
+#line 171 "src/lib/arch/cpc/runtime/bootstrap.asm"
+__CPC_END:
+#line 198 "src/lib/arch/cpc/runtime/bootstrap.asm"
+	    call __CPC_WAIT_KEY
+	    di
+	    rst  0
+#line 202 "src/lib/arch/cpc/runtime/bootstrap.asm"
+	    pop namespace
+#line 34 "tests/functional/arch/cpc/cpc_data.bas"
+#line 1 "src/lib/arch/cpc/runtime/copy_attr.asm"
+	; Copies the permanent attribute (ATTR_P/MASK_P/FLAGS2/P_FLAG) into the
+	; temporary one (ATTR_T/MASK_T/...) at the start of every PRINT
+	; statement, then pushes the resulting ink/paper pens (and INVERSE) to
+	; the firmware -- see __SET_ATTR_MODE below, which does the actual
+	; firmware call and is also the shared re-apply entry used whenever
+	; INK_TMP/PAPER_TMP/INVERSE_TMP/OVER_TMP change the temporary attribute
+	; mid-statement (e.g. `PRINT INK 2; "x"; PAPER 1; "y"`).
+	;
+	; zx48k's COPY_ATTR self-modifies a PRINT_MODE/INVERSE_MODE opcode pair
+	; inside print.asm's VRAM writer, guarded by ___PRINT_IS_USED___ (which
+	; zxbparser.py defines whenever a program uses PRINT at all). There is
+	; no such opcode table here -- print.asm calls the firmware's
+	; TXT_OUTPUT instead of writing VRAM directly, so applying an attribute
+	; just means calling TXT_SET_PEN/TXT_SET_PAPER/TXT_INVERSE. That work
+	; doesn't depend on whether PRINT is used elsewhere (if it isn't, this
+	; file is never linked in at all), so the ___PRINT_IS_USED___ branch
+	; zx48k has is dropped.
+	    push namespace core
+COPY_ATTR:
+	    ; Copies current permanent attribs into temporary attribs, then
+	    ; applies them to the firmware (pen/paper/inverse).
+	    PROC
+	    LOCAL __REFRESH_TMP
+	    ld hl, (ATTR_P)      ; = ATTR_P (L) + MASK_P (H), adjacent bytes
+	    ld (ATTR_T), hl      ; -> ATTR_T (L) + MASK_T (H)
+	    ld hl, FLAGS2
+	    call __REFRESH_TMP
+	    ld hl, P_FLAG
+	    call __REFRESH_TMP
+	    jp __SET_ATTR_MODE
+; zx48k's bit-shuffle: permanent flags live in the odd bits (1,3,5,7),
+	; temporary ones in the even bits (0,2,4,6) of the same byte; this
+	; copies one into the other. Pure bit manipulation, no CPC-specific
+	; change needed.
+__REFRESH_TMP:
+	    ld a, (hl)
+	    and 0b10101010
+	    ld c, a
+	    rra
+	    or c
+	    ld (hl), a
+	    ret
+	    ENDP
+	; Applies ATTR_T's ink/paper (Spectrum colours, mapped to pens of the
+	; current mode by colour.asm's __INK_TO_PEN) and P_FLAG's temporary INVERSE bit
+	; (bit 2) to the firmware's current pen/paper. Always re-derives both
+	; pens from ATTR_T first (rather than tracking whether they're already
+	; inverted), so it's safe to call repeatedly as flags change mid-PRINT.
+	;
+; Entry: none (rereads ATTR_T/P_FLAG directly; unlike zx48k's version,
+	; A is not significant on entry).
+; Firmware entries called (via the gate): TXT_SET_PEN (&BB90, A = ink
+	; pen), TXT_SET_PAPER (&BB96, A = paper pen), and, only when the
+	; temporary INVERSE flag is set, TXT_INVERSE (&BB9C, swaps the current
+	; pen/paper for the stream -- simpler than computing the swap here).
+; Registers clobbered: AF, HL (main); BC', DE', HL', AF' (the gate,
+	; once per firmware call above).
+__SET_ATTR_MODE:
+	    PROC
+	    LOCAL __SAM_NOINV
+    ld a, (ATTR_T)       ; ink: bits 0-2, a Spectrum colour
+	    call __INK_TO_PEN     ; -> pen of the current mode (colour.asm)
+	    call .core.__FW_CALL
+	    defw $BB90            ; TXT_SET_PEN
+	    ld a, (ATTR_T)
+	    rrca
+	    rrca
+    rrca                  ; paper: bits 3-5 -> bits 0-2
+	    call __INK_TO_PEN
+	    call .core.__FW_CALL
+	    defw $BB96             ; TXT_SET_PAPER
+	    ld a, (P_FLAG)
+	    and 4                 ; temporary INVERSE bit (bit 2 -- see inverse.asm)
+	    jr z, __SAM_NOINV
+	    call .core.__FW_CALL
+    defw $BB9C              ; TXT_INVERSE: swap current pen/paper
+__SAM_NOINV:
+	    ret
+	    ENDP
+	    pop namespace
+#line 35 "tests/functional/arch/cpc/cpc_data.bas"
+#line 1 "src/lib/arch/cpc/runtime/print.asm"
+	; PRINT command routine
+	; Does not print attribute. Use PRINT_STR or PRINT_NUM for that
+	;
+; Amstrad CPC: zx48k's version writes characters directly into Spectrum
+	; VRAM (interleaved-row bitmap, self-modifying PRINT_MODE/INVERSE_MODE
+	; opcodes, CHARS/UDG as the font source). There is no VRAM to write here
+	; -- printable characters go through the firmware's TXT_OUTPUT (&BB5A),
+	; which draws its own glyphs and handles wrap/scroll by itself. What
+	; this file has to do instead is keep the *external* contract exactly
+	; as zx48k's callers expect it (PRINT_AT/PRINT_COMMA/PRINT_EOL/PRINT_TAB,
+	; and __PRINTCHAR's "prints A, preserves BC and HL" contract that
+	; printstr.asm's loop relies on -- see printnum.asm/printi8/16/32.asm/
+	; printf16.asm for the other, self-protecting callers), and translate
+	; Boriel's embedded control codes (0-31, the same ones a Spectrum
+	; PRINT stream can carry) into firmware calls instead of raw bytes.
+	;
+; Translation table (control code -> action):
+	;   0-5,7,9-12,24-31  dropped (7 = BEEP, 12 = CLS on the real CPC
+	;                      firmware -- dropping them here is what keeps them
+	;                      from ever reaching TXT_OUTPUT raw, see below)
+	;   6   PRINT comma -> next half-screen zone (column 20, or a newline if
+	;       already at or past column 20 -- half of the 40-column screen)
+	;   8   DEL -> cursor back one column (wraps to the end of the previous
+	;       row; no VRAM erase, matching zx48k)
+	;   13  newline (also what PRINT_EOL emits) -> CR (13) then LF (10) via
+	;       TXT_OUTPUT; the firmware wraps/scrolls by itself
+	;   14  BOLD, 15 ITALIC, 18 FLASH, 19 BRIGHT, 21 OVER -> consume their
+	;       parameter byte and update ATTR_T/FLAGS2 (memory only) via the
+	;       matching *_TMP setter, same as zx48k; no firmware effect yet
+;       TODO(cpc): Phase 4a
+	;   16  INK, 17 PAPER -> consume the pen number and call INK_TMP/
+	;       PAPER_TMP, which (on the CPC, unlike zx48k) push the pen to the
+	;       firmware immediately -- see ink.asm/paper.asm
+	;   20  INVERSE -> consume the flag and call INVERSE_TMP, which pushes
+	;       it to the firmware immediately (pen/paper swap, via
+	;       copy_attr.asm's __SET_ATTR_MODE)
+	;   22  AT -> consumes ROW then COL and calls TXT_SET_CURSOR (via
+	;       __SAVE_S_POSN); no bounds check, matching zx48k's own embedded
+	;       AT (only the *statement* form, PRINT_AT below, checks bounds)
+	;   23  TAB -> consumes 2 bytes (only the first is used, matching
+	;       zx48k) and pads with spaces up to that column, modulo the
+;       screen width (TXT_COLS: 20/40/80 by mode)
+	;   32-255  printed via TXT_OUTPUT; 128-143 (Spectrum block graphics)
+	;           translated to the CPC's own quadrant characters first
+	;
+; Phase-3 printer echo (-D __CPC_PRINTER_ECHO__, cpcbuild's cpcrun.py):
+	; every character actually sent to TXT_OUTPUT is mirrored to the
+	; printer via MC_PRINT_CHAR (&BD2B), through the gate (__PRN_ECHO
+	; below), so a program compiled with the flag produces a plain-text
+	; transcript of its PRINT output that cpcrun.py can capture headlessly
+	; (Caprice32's printer_file) and diff against expected output.
+;   - Newline (code 13) reaches the printer as a bare LF, not CR+LF:
+	;     the screen still gets CR+LF (the firmware's own convention), but
+	;     the printer file only needs one line-ending byte to be a clean,
+	;     diffable text file, and LF is what every host tool expects.
+;   - PRINT_COMMA and PRINT_TAB need no special-casing: both work by
+	;     calling __PRINTCHAR with spaces (see below), which already go
+	;     through the normal >=32 path and get echoed like any other
+	;     character.
+	;   - AT (both the embedded control code and the PRINT_AT statement
+	;     entry point below) moves the cursor without emitting any
+	;     character, so nothing would reach the printer at all; a bare LF
+	;     is emitted instead, on the theory that starting a fresh printer
+	;     line is more useful for a text transcript than staying silent.
+	;
+; A note on why this doesn't use zx48k's exx-based state machine: zx48k
+	; switches to the alternate register bank across the whole of
+	; __PRINTCHAR to get itself a private BC'/DE'/HL' scratch area,
+	; protecting the *caller's* main-bank registers, and switches back
+	; before returning. That's safe on the Spectrum because __PRINTCHAR
+	; never calls anything that itself uses exx. Here it would call the
+	; firmware gate (fwcall.asm), which *does* use exx internally to reach
+	; FW_BC/IN_FW -- nesting the two would have the gate's exx land on
+	; whatever __PRINTCHAR's own exx had swapped OUT of (the real caller's
+	; live registers, e.g. printstr.asm's string pointer/length), not on
+	; scratch. So the "which control code came next" state lives in a plain
+	; memory byte (PRINT_STATE, sysvars.asm) instead, and BC/HL are
+	; protected with an ordinary push/pop around the whole routine.
+#line 1 "src/lib/arch/cpc/runtime/sposn.asm"
+	; Print cursor positioning, via the firmware's own live cursor
+	; (TXT_GET_CURSOR / TXT_SET_CURSOR) instead of the Spectrum VRAM/attribute
+	; address formula zx48k's version computes. The firmware is the only
+; source of truth for the cursor: it moves the cursor itself on every
+	; TXT_OUTPUT (wrap, scroll), so there is nothing useful to cache
+	; locally (S_POSN, sysvars.asm, is left vestigial). Used internally by
+	; print.asm and directly by the stdlib POS()/CSRLIN() functions (see
+; zx48k's pos.bas/csrlin.bas: `call __LOAD_S_POSN` then `ld a,e`/`ld a,d`).
+	;
+; Register convention kept identical to zx48k: __LOAD_S_POSN returns
+	; D = row, E = column, both 0-based; __SAVE_S_POSN takes the same in D, E.
+	;
+	; zx48k's __LOAD_S_POSN never happens to touch A (its body is just
+	; `ld de,(S_POSN) / ld hl,SCR_SIZE / or a / sbc hl,de / ex de,hl / ret`,
+	; and `or a` leaves A's value alone) -- so PRINT_TAB (below), inherited
+; from zx48k unchanged, relies on A surviving the call: it loads the
+	; target column into A, calls __LOAD_S_POSN, and only then does `sub e`
+	; against the *original* A. This version has to read the firmware's
+	; cursor through A (TXT_GET_CURSOR returns the column/row in H/L, but
+	; getting them into D/E goes via A), so it preserves the caller's AF
+	; across the call explicitly instead of getting it for free.
+	; Printing positioning library.
+	    push namespace core
+	; Reads the firmware's cursor into D = row, E = column (both 0-based).
+	;
+; Firmware entry called (via the gate): TXT_GET_CURSOR (&BB78). Per the
+	; Firmware Guide, H = logical column, L = logical line (both 1-based),
+	; A = roll count; BC and DE are preserved by the firmware itself, only
+	; the flags are corrupt -- so the gate's own alternate-bank clobbering
+	; is the only thing to account for here.
+	;
+	; TXT_GET_CURSOR can report column 41 (1-based) when a wrap is pending
+	; (the last character printed reached column 40 but hasn't scrolled
+; yet): that has no representation in the 0-39 range, so it's folded
+	; forward here to column 0 of the next row (clamped at the last row,
+	; since printing one more character would scroll rather than move past
+	; it).
+; Registers clobbered: HL (main; AF is saved/restored, see the file
+	; header); BC', DE', HL', AF' (the gate).
+__LOAD_S_POSN:
+	    PROC
+	    LOCAL __LSP_WRAP, __LSP_CLAMP, __LSP_DONE
+	    push af             ; preserve the caller's A -- see the file header
+	    call .core.__FW_CALL
+	    defw $BB78
+	    ld a, l           ; L = logical line, 1-based
+	    dec a
+	    ld d, a           ; D = row, 0-based
+    ld a, (TXT_COLS)  ; H = logical column, 1-based: up to TXT_COLS + 1
+	    inc a             ; when a wrap is pending
+	    cp h
+	    ld a, h
+	    jr z, __LSP_WRAP
+	    dec a
+	    ld e, a
+	    jr __LSP_DONE
+__LSP_WRAP:           ; pending wrap: next char goes to (row+1, 0)
+	    ld e, 0
+	    ld a, d
+	    inc a
+	    cp SCR_ROWS
+	    jr c, __LSP_CLAMP
+    ld a, SCR_ROWS - 1  ; clamp: already on the last row
+__LSP_CLAMP:
+	    ld d, a
+__LSP_DONE:
+	    pop af
+	    ret
+	    ENDP
+	; Sets the firmware's cursor from D = row, E = column (both 0-based).
+; Does not range-check (matches zx48k: callers that need bounds
+	; checking, e.g. PRINT_AT, do it themselves before calling this).
+	;
+; Firmware entry called (via the gate): TXT_SET_CURSOR (&BB75), H =
+	; logical column, L = logical line (both 1-based).
+; Registers clobbered: AF, HL (main); BC', DE', HL', AF' (the gate).
+__SAVE_S_POSN:
+	    PROC
+	    ld a, e
+	    inc a
+	    ld h, a           ; H = column, 1-based
+	    ld a, d
+	    inc a
+	    ld l, a           ; L = row, 1-based
+	    call .core.__FW_CALL
+	    defw $BB75
+	    ret
+	    ENDP
+	    pop namespace
+#line 81 "src/lib/arch/cpc/runtime/print.asm"
+#line 1 "src/lib/arch/cpc/runtime/error.asm"
+	; Simple error control routines
+	;
+; Phase-2 (cpc-port-notes.md Phase 2 decisions / docs/notes.md): a
+	; runtime error prints "Error n" (n = the ERROR_* code below, in
+	; decimal) through the firmware, starting on a fresh line, then waits
+	; for a key, then resets to BASIC's Ready prompt. This replaces the
+	; Phase 1 hang-in-place trap for real errors; __CPC_NOT_IMPLEMENTED
+	; (stub.asm) still hangs, unchanged, for genuinely unimplemented
+	; stubs -- those two cases must stay visibly different. __STOP keeps
+; the zx48k contract: store the code in ERR_NR and return. ERROR_*
+	; constants keep their zx48k values (just numbers, not addresses).
+	;
+	; The message is printed with TXT_OUTPUT (&BB5A) directly, through the
+	; gate (fwcall.asm) -- not print.asm, which isn't implemented yet
+	; (print.asm's own TODO) and shouldn't be a dependency of the error
+	; path anyway. TXT_OUTPUT's entry/exit are the same as far as this file
+; needs: A = the character/control code to output, and (confirmed
+	; against the Firmware Guide, cpc-port-notes.md Sec6.4) *all* registers
+	; preserved -- so BC/DE/HL survive every call below without saving them
+	; around each one.
+	;
+; Phase-3 printer echo (-D __CPC_PRINTER_ECHO__, cpcbuild's cpcrun.py):
+	; every character this file sends to the screen is mirrored to the
+	; printer via MC_PRINT_CHAR (&BD2B), through the gate, same as
+	; print.asm's __PRN_ECHO (duplicated here as __ERR_PRN_ECHO rather than
+	; including print.asm -- see the paragraph above). The screen still gets
+	; CR+LF for a fresh line; the printer gets a bare LF (print.asm's
+; decision: a clean, diffable text file). And in this mode the whole
+	; point is that a *failing* test still reaches END, so __ERROR must not
+; block on a keypress: it skips the key flush/wait and goes straight
+	; to `rst 0` once "Error n" has been echoed.
+	    push namespace core
+	; Error code definitions (as in ZX spectrum manual)
+; Set error code with:
+	;    ld a, ERROR_CODE
+	;    ld (ERR_NR), a
+	ERROR_Ok                EQU    -1
+	ERROR_SubscriptWrong    EQU     2
+	ERROR_OutOfMemory       EQU     3
+	ERROR_OutOfScreen       EQU     4
+	ERROR_NumberTooBig      EQU     5
+	ERROR_InvalidArg        EQU     9
+	ERROR_IntOutOfRange     EQU    10
+	ERROR_NonsenseInBasic   EQU    11
+	ERROR_InvalidFileName   EQU    14
+	ERROR_InvalidColour     EQU    19
+	ERROR_BreakIntoProgram  EQU    20
+	ERROR_TapeLoadingErr    EQU    26
+__ERR_STR: DEFB "Error ", 0
+#line 83 "src/lib/arch/cpc/runtime/error.asm"
+; Raises a runtime error: stores the code, prints "Error n" on a fresh
+	; line, waits for a keypress, then resets to BASIC's Ready prompt (END's
+	; own reset, generic.py's _end -- see cpc-port-notes.md Sec6.5).
+	;
+	; This never returns to the caller.
+	;
+; Firmware entries called (all through the gate): TXT_OUTPUT (&BB5A),
+	; KM_READ_CHAR (&BB09) until the key buffer is empty, then KM_WAIT_KEY
+; (&BB18), both via bootstrap.asm's __CPC_WAIT_KEY. (Not KM_FLUSH: that
+	; is 664/6128 only, and the 464 is supported.) The flush discards
+	; whatever is in the key buffer first -- most obviously the RETURN that submitted
+	; RUN"<prog>" itself, which would otherwise satisfy KM_WAIT_KEY without
+	; a real keypress -- so the wait below is for a new key, not a stale
+	; one. Verified end to end in the emulator (cpc-port-notes.md Phase 2
+; results): "Error n" prints, the machine sits at KM_WAIT_KEY, and a
+	; keypress resets it to BASIC's Ready prompt. The firmware's own
+	; key-scan interrupt handler fills in the keypress while we're blocked
+	; inside KM_WAIT_KEY. Interrupts go off just before the reset, so our
+	; &0038 vector (isr.asm) is never used while the firmware rebuilds it.
+; Registers clobbered: none (never returns).
+__ERROR:
+	    PROC
+	    ld   (ERR_NR), a
+	    ld   c, a           ; stash the error number (survives TXT_OUTPUT
+	                        ; and the gate -- see the file header)
+    ; Fresh line: CR then LF (cpc-port-notes.md Phase 2 decisions --
+	    ; the same translation print.asm applies to Boriel's newline code
+	    ; 13, spelled out here since the error path doesn't use print.asm).
+	    ; Printer echo gets the LF only, not the CR (print.asm's decision).
+	    ld   a, 13
+	    call .core.__FW_CALL
+	    defw $BB5A
+	    ld   a, 10
+	    call .core.__FW_CALL
+	    defw $BB5A
+#line 124 "src/lib/arch/cpc/runtime/error.asm"
+	    ; "Error "
+	    ld   hl, __ERR_STR
+__ERROR_MSG_LOOP:
+	    ld   a, (hl)
+	    or   a
+	    jr   z, __ERROR_MSG_DONE
+	    inc  hl
+	    call .core.__FW_CALL
+	    defw $BB5A
+#line 137 "src/lib/arch/cpc/runtime/error.asm"
+	    jr   __ERROR_MSG_LOOP
+__ERROR_MSG_DONE:
+	    ld   a, c
+	    call __PRINT_DECIMAL_A
+#line 149 "src/lib/arch/cpc/runtime/error.asm"
+	    ; Flush stale keys, then wait for a real one (bootstrap.asm).
+	    call __CPC_WAIT_KEY
+	    di
+	    rst  0              ; reset to BASIC's Ready prompt
+#line 155 "src/lib/arch/cpc/runtime/error.asm"
+	    ENDP
+	; Sets the error system variable, but keeps running.
+	; Usually this instruction if followed by the END intermediate instruction.
+__STOP:
+	    ld (ERR_NR), a
+	    ret
+	; __PRINT_DECIMAL_A -- prints A (0-255) in decimal via TXT_OUTPUT,
+	; through the gate, with no leading zeros ("0" alone for zero). A tiny
+; local printer: error.asm deliberately doesn't pull in print.asm (see
+	; the file header), and the alternative -- str.asm's %d-style formatter
+	; -- is built on print.asm too.
+	;
+	; TXT_OUTPUT (and the gate around it) preserve every register, so B/C/D/E
+	; are usable as plain scratch across each individual call below.
+; Registers clobbered: AF, BC, DE, HL.
+__PRINT_DECIMAL_A:
+	    PROC
+	    LOCAL __PDA_DIGIT, __PDA_SUB, __PDA_DONE, __PDA_SKIP
+	    ld   d, 0            ; D = 1 once a non-zero digit has been printed
+	    ld   b, 100
+	    call __PDA_DIGIT
+	    ld   b, 10
+	    call __PDA_DIGIT
+	    ld   b, 1
+	    ld   d, 1            ; the units digit always prints, even if 0
+	    call __PDA_DIGIT
+	    ret
+	; A = remaining value (in/out), B = place value (in), D = "seen a
+	; digit yet" flag (in/out). C is scratch.
+__PDA_DIGIT:
+	    ld   c, 0
+__PDA_SUB:
+	    cp   b
+	    jr   c, __PDA_DONE
+	    sub  b
+	    inc  c
+	    jr   __PDA_SUB
+__PDA_DONE:
+	    ld   e, a            ; stash the remainder (survives the gate call)
+	    ld   a, c
+	    or   d
+	    jr   z, __PDA_SKIP    ; no digit seen yet and this one is 0 -- skip
+	    ld   d, 1
+	    ld   a, c
+	    add  a, '0'
+	    call .core.__FW_CALL
+	    defw $BB5A
+#line 213 "src/lib/arch/cpc/runtime/error.asm"
+__PDA_SKIP:
+	    ld   a, e             ; remainder becomes the input for the next digit
+	    ret
+	    ENDP
+	    pop namespace
+#line 83 "src/lib/arch/cpc/runtime/print.asm"
+#line 1 "src/lib/arch/zx48k/runtime/table_jump.asm"
+	    push namespace core
+JUMP_HL_PLUS_2A: ; Does JP (HL + A*2) Modifies DE. Modifies A
+	    add a, a
+JUMP_HL_PLUS_A:	 ; Does JP (HL + A) Modifies DE
+	    ld e, a
+	    ld d, 0
+JUMP_HL_PLUS_DE: ; Does JP (HL + DE)
+	    add hl, de
+	    ld e, (hl)
+	    inc hl
+	    ld d, (hl)
+	    ex de, hl
+CALL_HL:
+	    jp (hl)
+	    pop namespace
+#line 84 "src/lib/arch/cpc/runtime/print.asm"
+#line 1 "src/lib/arch/cpc/runtime/ink.asm"
+	; Sets ink color in ATTR_P permanently
+; Parameter: Ink color in A register
+	;
+; Amstrad CPC: byte-for-byte zx48k's version for the permanent entry
+	; (INK) -- it only touches ATTR_P/MASK_P by name via sysvars.asm, which
+	; cpc's own sysvars.asm relocates into the private runtime block, so a
+	; plain INK statement just updates memory (it takes effect at the next
+	; PRINT's COPY_ATTR, exactly like zx48k). INK_TMP additionally pushes
+	; the new pen to the firmware immediately (via __SET_ATTR_MODE,
+	; copy_attr.asm) -- unlike the Spectrum, where SET_ATTR re-reads ATTR_T
+	; per character, the CPC firmware's pen is persistent state, so a
+	; mid-PRINT `PRINT INK n;...` has to update it right away.
+	    push namespace core
+INK:
+	    PROC
+	    LOCAL __SET_INK
+	    LOCAL __SET_INK2
+	    ld de, ATTR_P
+__SET_INK:
+	    cp 8
+	    jr nz, __SET_INK2
+	    inc de ; Points DE to MASK_T or MASK_P
+	    ld a, (de)
+	    or 7 ; Set bits 0,1,2 to enable transparency
+	    ld (de), a
+	    ret
+__SET_INK2:
+	    ; Another entry. This will set the ink color at location pointer by DE
+	    and 7	; # Gets color mod 8
+	    ld b, a	; Saves the color
+	    ld a, (de)
+	    and 0F8h ; Clears previous value
+	    or b
+	    ld (de), a
+	    inc de ; Points DE to MASK_T or MASK_P
+	    ld a, (de)
+	    and 0F8h ; Reset bits 0,1,2 sign to disable transparency
+	    ld (de), a ; Store new attr
+	    ret
+	; Sets the INK color passed in A register in the ATTR_T variable, and
+	; pushes it to the firmware right away (see the file header).
+INK_TMP:
+	    ld de, ATTR_T
+	    call __SET_INK
+	    jp __SET_ATTR_MODE
+	    ENDP
+	    pop namespace
+#line 85 "src/lib/arch/cpc/runtime/print.asm"
+#line 1 "src/lib/arch/cpc/runtime/paper.asm"
+	; Sets paper color in ATTR_P permanently
+; Parameter: Paper color in A register
+	;
+; Amstrad CPC: byte-for-byte zx48k's version for the permanent entry
+	; (PAPER). PAPER_TMP additionally pushes the new pen to the firmware
+	; right away, via __SET_ATTR_MODE -- see ink.asm's header for why.
+	    push namespace core
+PAPER:
+	    PROC
+	    LOCAL __SET_PAPER
+	    LOCAL __SET_PAPER2
+	    ld de, ATTR_P
+__SET_PAPER:
+	    cp 8
+	    jr nz, __SET_PAPER2
+	    inc de
+	    ld a, (de)
+	    or 038h
+	    ld (de), a
+	    ret
+	    ; Another entry. This will set the paper color at location pointer by DE
+__SET_PAPER2:
+	    and 7	; # Remove
+	    rlca
+	    rlca
+	    rlca		; a *= 8
+	    ld b, a	; Saves the color
+	    ld a, (de)
+	    and 0C7h ; Clears previous value
+	    or b
+	    ld (de), a
+	    inc de ; Points to MASK_T or MASK_P accordingly
+	    ld a, (de)
+	    and 0C7h  ; Resets bits 3,4,5
+	    ld (de), a
+	    ret
+	; Sets the PAPER color passed in A register in the ATTR_T variable, and
+	; pushes it to the firmware right away (see the file header).
+PAPER_TMP:
+	    ld de, ATTR_T
+	    call __SET_PAPER
+	    jp __SET_ATTR_MODE
+	    ENDP
+	    pop namespace
+#line 86 "src/lib/arch/cpc/runtime/print.asm"
+#line 1 "src/lib/arch/cpc/runtime/flash.asm"
+	; Sets flash flag in ATTR_P permanently
+; Parameter: Paper color in A register
+	;
+; Amstrad CPC: only touches ATTR_P/ATTR_T by name (no ROM/HW), kept
+	; byte-for-byte identical to zx48k's since sysvars.asm already relocates
+	; those names.
+	    push namespace core
+FLASH:
+	    ld hl, ATTR_P
+	    PROC
+	    LOCAL IS_TR
+	    LOCAL IS_ZERO
+__SET_FLASH:
+	    ; Another entry. This will set the flash flag at location pointer by DE
+	    cp 8
+	    jr z, IS_TR
+	    ; # Convert to 0/1
+	    or a
+	    jr z, IS_ZERO
+	    ld a, 0x80
+IS_ZERO:
+	    ld b, a	; Saves the color
+	    ld a, (hl)
+	    and 07Fh ; Clears previous value
+	    or b
+	    ld (hl), a
+	    inc hl
+	    res 7, (hl)  ;Reset bit 7 to disable transparency
+	    ret
+IS_TR:  ; transparent
+	    inc hl ; Points DE to MASK_T or MASK_P
+	    set 7, (hl)  ;Set bit 7 to enable transparency
+	    ret
+	; Sets the FLASH flag passed in A register in the ATTR_T variable
+FLASH_TMP:
+	    ld hl, ATTR_T
+	    jr __SET_FLASH
+	    ENDP
+	    pop namespace
+#line 87 "src/lib/arch/cpc/runtime/print.asm"
+#line 1 "src/lib/arch/cpc/runtime/bright.asm"
+	; Sets bright flag in ATTR_P permanently
+; Parameter: Paper color in A register
+	;
+; Amstrad CPC: only touches ATTR_P/ATTR_T by name (no ROM/HW), kept
+	; byte-for-byte identical to zx48k's since sysvars.asm already relocates
+	; those names.
+	    push namespace core
+BRIGHT:
+	    ld hl, ATTR_P
+	    PROC
+	    LOCAL IS_TR
+	    LOCAL IS_ZERO
+__SET_BRIGHT:
+	    ; Another entry. This will set the bright flag at location pointer by DE
+	    cp 8
+	    jr z, IS_TR
+	    ; # Convert to 0/1
+	    or a
+	    jr z, IS_ZERO
+	    ld a, 0x40
+IS_ZERO:
+	    ld b, a	; Saves the color
+	    ld a, (hl)
+	    and 0BFh ; Clears previous value
+	    or b
+	    ld (hl), a
+	    inc hl
+	    res 6, (hl)  ;Reset bit 6 to disable transparency
+	    ret
+IS_TR:  ; transparent
+	    inc hl ; Points DE to MASK_T or MASK_P
+	    set 6, (hl)  ;Set bit 6 to enable transparency
+	    ret
+	; Sets the BRIGHT flag passed in A register in the ATTR_T variable
+BRIGHT_TMP:
+	    ld hl, ATTR_T
+	    jr __SET_BRIGHT
+	    ENDP
+	    pop namespace
+#line 88 "src/lib/arch/cpc/runtime/print.asm"
+#line 1 "src/lib/arch/cpc/runtime/over.asm"
+	; Sets OVER flag in P_FLAG permanently
+; Parameter: OVER flag in bit 0 of A register
+	;
+; Amstrad CPC: same as inverse.asm -- OVER only touches FLAGS2/P_FLAG by
+	; name (no ROM/HW), kept byte-for-byte identical. OVER 1 is XOR for
+	; PLOT/DRAW/CIRCLE (gfx.asm, the firmware's graphics write mode) and is
+; ignored for text: the firmware has no XOR text mode (notes.md Q5).
+	    push namespace core
+OVER:
+	    PROC
+	    ld c, a ; saves it for later
+	    and 2
+	    ld hl, FLAGS2
+	    res 1, (HL)
+	    or (hl)
+	    ld (hl), a
+	    ld a, c	; Recovers previous value
+	    and 1	; # Convert to 0/1
+	    add a, a; # Shift left 1 bit for permanent
+	    ld hl, P_FLAG
+	    res 1, (hl)
+	    or (hl)
+	    ld (hl), a
+	    ret
+	; Sets OVER flag in P_FLAG temporarily
+OVER_TMP:
+	    ld c, a ; saves it for later
+	    and 2	; gets bit 1; clears carry
+	    rra
+	    ld hl, FLAGS2
+	    res 0, (hl)
+	    or (hl)
+	    ld (hl), a
+	    ld a, c	; Recovers previous value
+	    and 1
+	    ld hl, P_FLAG
+	    res 0, (hl)
+	    or (hl)
+	    ld (hl), a
+	    jp __SET_ATTR_MODE
+	    ENDP
+	    pop namespace
+#line 89 "src/lib/arch/cpc/runtime/print.asm"
+#line 1 "src/lib/arch/cpc/runtime/inverse.asm"
+	; Sets INVERSE flag in P_FLAG permanently
+; Parameter: INVERSE flag in bit 0 of A register
+	;
+; Amstrad CPC: INVERSE only touches P_FLAG by name (no ROM/HW), kept
+	; byte-for-byte identical to zx48k's. INVERSE_TMP tail-calls into
+	; copy_attr.asm's __SET_ATTR_MODE, which applies it to the text pens at
+	; once; PLOT/DRAW/CIRCLE read it in gfx.asm (plot in the paper colour).
+	    push namespace core
+INVERSE:
+	    PROC
+	    and 1	; # Convert to 0/1
+	    add a, a; # Shift left 3 bits for permanent
+	    add a, a
+	    add a, a
+	    ld hl, P_FLAG
+	    res 3, (hl)
+	    or (hl)
+	    ld (hl), a
+	    ret
+	; Sets INVERSE flag in P_FLAG temporarily
+INVERSE_TMP:
+	    and 1
+	    add a, a
+	    add a, a; # Shift left 2 bits for temporary
+	    ld hl, P_FLAG
+	    res 2, (hl)
+	    or (hl)
+	    ld (hl), a
+	    jp __SET_ATTR_MODE
+	    ENDP
+	    pop namespace
+#line 90 "src/lib/arch/cpc/runtime/print.asm"
+#line 1 "src/lib/arch/cpc/runtime/bold.asm"
+	; Sets BOLD flag in P_FLAG permanently
+; Parameter: BOLD flag in bit 0 of A register
+	;
+; Amstrad CPC: only touches FLAGS2 by name (no ROM/HW), kept
+	; byte-for-byte identical to zx48k's.
+	    push namespace core
+BOLD:
+	    PROC
+	    and 1
+	    rlca
+	    rlca
+	    rlca
+	    ld hl, FLAGS2
+	    res 3, (HL)
+	    or (hl)
+	    ld (hl), a
+	    ret
+	; Sets BOLD flag in P_FLAG temporarily
+BOLD_TMP:
+	    and 1
+	    rlca
+	    rlca
+	    ld hl, FLAGS2
+	    res 2, (hl)
+	    or (hl)
+	    ld (hl), a
+	    ret
+	    ENDP
+	    pop namespace
+#line 91 "src/lib/arch/cpc/runtime/print.asm"
+#line 1 "src/lib/arch/cpc/runtime/italic.asm"
+	; Sets ITALIC flag in P_FLAG permanently
+; Parameter: ITALIC flag in bit 0 of A register
+	;
+; Amstrad CPC: only touches FLAGS2 by name (no ROM/HW), kept
+	; byte-for-byte identical to zx48k's.
+	    push namespace core
+ITALIC:
+	    PROC
+	    and 1
+	    rrca
+	    rrca
+	    rrca
+	    ld hl, FLAGS2
+	    res 5, (HL)
+	    or (hl)
+	    ld (hl), a
+	    ret
+	; Sets ITALIC flag in P_FLAG temporarily
+ITALIC_TMP:
+	    and 1
+	    rrca
+	    rrca
+	    rrca
+	    rrca
+	    ld hl, FLAGS2
+	    res 4, (hl)
+	    or (hl)
+	    ld (hl), a
+	    ret
+	    ENDP
+	    pop namespace
+#line 92 "src/lib/arch/cpc/runtime/print.asm"
+	    push namespace core
+#line 118 "src/lib/arch/cpc/runtime/print.asm"
+; __PRINTCHAR: prints the character/control code in A.
+	; Preserves BC and HL (printstr.asm's loop does `call __PRINTCHAR`
+	; then `inc hl` / `dec bc` with no push/pop of its own); clobbers AF,
+	; DE, and, for the special codes, calls the firmware gate (which
+	; clobbers BC'/DE'/HL'/AF').
+__PRINTCHAR:
+	    PROC
+	    LOCAL __PC_NORMAL, __PC_OUT, __PC_STATE_DISPATCH, __PC_DONE
+	    LOCAL __PC_TABLE, __PC_STATE_TABLE
+	    LOCAL __PC_NOP, __PC_COMMA, __PC_DEL, __PC_DEL_COL, __PC_DEL_SAVE, __PC_DEL_RET
+	    LOCAL __PC_NEWLINE_CODE
+	    LOCAL __PC_ARM_AT, __PC_ARM_INK, __PC_ARM_PAPER, __PC_ARM_FLASH
+	    LOCAL __PC_ARM_BRIGHT, __PC_ARM_INVERSE, __PC_ARM_OVER
+	    LOCAL __PC_ARM_BOLD, __PC_ARM_ITALIC, __PC_ARM_TAB
+	    LOCAL __PC_S_AT_ROW, __PC_S_AT_COL, __PC_S_INK, __PC_S_PAPER, __PC_S_FLASH
+	    LOCAL __PC_S_BRIGHT, __PC_S_INVERSE, __PC_S_OVER, __PC_S_BOLD, __PC_S_ITALIC
+	    LOCAL __PC_S_TAB1, __PC_S_TAB2
+	    push hl
+	    push bc
+	    ld hl, PRINT_STATE
+	    ld c, (hl)          ; C = pending state (0 = none)
+	    ld (hl), 0          ; consumed; handlers below re-arm as needed
+	    ld b, a             ; B = the char/code for this call
+	    ld a, c
+	    or a
+	    jr nz, __PC_STATE_DISPATCH
+	    ld a, b
+	    cp 32
+	    jr nc, __PC_NORMAL
+	    ld hl, __PC_TABLE
+	    ld a, b
+	    call JUMP_HL_PLUS_2A
+	    jr __PC_DONE
+__PC_NORMAL:            ; printable char (32-255) -> TXT_OUTPUT
+	    cp 144
+	    jr nc, __PC_OUT
+	    cp 128
+	    jr c, __PC_OUT
+	    ; Spectrum block graphics 128-143 are the CPC's 128-143 quadrant
+    ; characters with the quadrants numbered differently (Spectrum bits:
+    ; 0 top right, 1 top left, 2 bottom right, 3 bottom left; CPC: 0 top
+	    ; left, 1 top right, 2 bottom left, 3 bottom right -- checked in the
+	    ; emulator), so swap bits 0<->1 and 2<->3. No glyph table needed.
+	    ld c, a
+	    and $0A
+	    rrca                ; bits 1, 3 -> 0, 2
+	    ld b, a
+	    ld a, c
+	    and $05
+	    rlca                ; bits 0, 2 -> 1, 3
+	    or b
+	    or $80
+__PC_OUT:
+	    call .core.__FW_CALL
+	    defw $BB5A
+#line 184 "src/lib/arch/cpc/runtime/print.asm"
+	    jr __PC_DONE
+__PC_STATE_DISPATCH:    ; C held a pending state -> this byte is its parameter
+	    ld hl, __PC_STATE_TABLE
+	    ld a, c
+	    call JUMP_HL_PLUS_2A
+__PC_DONE:
+	    pop bc
+	    pop hl
+	    ret
+	; ---- state-0 handlers (dispatched on the code itself, table below) ----
+__PC_NOP:
+	    ret
+__PC_COMMA:
+	    call PRINT_COMMA
+	    ret
+__PC_DEL:               ; cursor back one column, no VRAM erase
+	    call __LOAD_S_POSN  ; D = row, E = column
+	    ld a, e
+	    or a
+	    jr nz, __PC_DEL_COL
+	    ld a, d
+	    or a
+    jr z, __PC_DEL_RET  ; already at (0,0): nothing to do
+	    dec a
+	    ld d, a
+	    ld a, (TXT_COLS)
+	    dec a
+	    ld e, a             ; last column of the current mode
+	    jr __PC_DEL_SAVE
+__PC_DEL_COL:
+	    dec e
+__PC_DEL_SAVE:
+	    call __SAVE_S_POSN
+__PC_DEL_RET:
+	    ret
+__PC_NEWLINE_CODE:      ; CHR$(13): newline
+	    call __PRINT_NEWLINE
+	    ret
+	; Shared by CHR$(13) and PRINT_EOL (end of a PRINT statement with no
+	; trailing ";"). CR then LF, exactly like a Spectrum newline; the
+	; firmware wraps/scrolls by itself.
+; Firmware entry called (via the gate, twice): TXT_OUTPUT (&BB5A),
+	; which preserves all registers.
+; Registers clobbered: AF (main); BC', DE', HL', AF' (the gate).
+__PRINT_NEWLINE:
+	    ld a, 13
+	    call .core.__FW_CALL
+	    defw $BB5A
+	    ld a, 10
+	    call .core.__FW_CALL
+	    defw $BB5A
+#line 246 "src/lib/arch/cpc/runtime/print.asm"
+	    ret
+__PC_ARM_AT:
+	    ld a, 1
+	    ld (PRINT_STATE), a
+	    ret
+__PC_ARM_INK:
+	    ld a, 3
+	    ld (PRINT_STATE), a
+	    ret
+__PC_ARM_PAPER:
+	    ld a, 4
+	    ld (PRINT_STATE), a
+	    ret
+__PC_ARM_FLASH:
+	    ld a, 5
+	    ld (PRINT_STATE), a
+	    ret
+__PC_ARM_BRIGHT:
+	    ld a, 6
+	    ld (PRINT_STATE), a
+	    ret
+__PC_ARM_INVERSE:
+	    ld a, 7
+	    ld (PRINT_STATE), a
+	    ret
+__PC_ARM_OVER:
+	    ld a, 8
+	    ld (PRINT_STATE), a
+	    ret
+__PC_ARM_BOLD:
+	    ld a, 9
+	    ld (PRINT_STATE), a
+	    ret
+__PC_ARM_ITALIC:
+	    ld a, 10
+	    ld (PRINT_STATE), a
+	    ret
+__PC_ARM_TAB:
+	    ld a, 11
+	    ld (PRINT_STATE), a
+	    ret
+__PC_TABLE:             ; codes 0-31, state 0 (fresh dispatch)
+	    DW __PC_NOP         ;  0
+	    DW __PC_NOP         ;  1
+	    DW __PC_NOP         ;  2
+	    DW __PC_NOP         ;  3
+	    DW __PC_NOP         ;  4
+	    DW __PC_NOP         ;  5
+	    DW __PC_COMMA       ;  6 comma
+	    DW __PC_NOP         ;  7 (BEEP on the CPC -- dropped)
+	    DW __PC_DEL         ;  8 DEL
+	    DW __PC_NOP         ;  9
+	    DW __PC_NOP         ; 10
+	    DW __PC_NOP         ; 11
+	    DW __PC_NOP         ; 12 (CLS on the CPC -- dropped)
+	    DW __PC_NEWLINE_CODE; 13 newline
+	    DW __PC_ARM_BOLD    ; 14
+	    DW __PC_ARM_ITALIC  ; 15
+	    DW __PC_ARM_INK     ; 16
+	    DW __PC_ARM_PAPER   ; 17
+	    DW __PC_ARM_FLASH   ; 18
+	    DW __PC_ARM_BRIGHT  ; 19
+	    DW __PC_ARM_INVERSE ; 20
+	    DW __PC_ARM_OVER    ; 21
+	    DW __PC_ARM_AT      ; 22 AT
+	    DW __PC_ARM_TAB     ; 23 TAB
+	    DW __PC_NOP         ; 24
+	    DW __PC_NOP         ; 25
+	    DW __PC_NOP         ; 26
+	    DW __PC_NOP         ; 27
+	    DW __PC_NOP         ; 28
+	    DW __PC_NOP         ; 29
+	    DW __PC_NOP         ; 30
+	    DW __PC_NOP         ; 31
+	; ---- state-N handlers (dispatched on the pending state; B = param byte) ----
+__PC_S_AT_ROW:          ; state 1: B = ROW, stash it, arm state 2
+	    ld a, b
+	    ld (MEM0), a
+	    ld a, 2
+	    ld (PRINT_STATE), a
+	    ret
+__PC_S_AT_COL:          ; state 2: B = COL; D = stashed ROW, E = COL
+	    ld a, (MEM0)
+	    ld d, a
+	    ld e, b
+	    call __SAVE_S_POSN  ; no bounds check -- matches zx48k's embedded AT
+#line 341 "src/lib/arch/cpc/runtime/print.asm"
+	    ret
+__PC_S_INK:
+	    ld a, b
+	    call INK_TMP
+	    ret
+__PC_S_PAPER:
+	    ld a, b
+	    call PAPER_TMP
+	    ret
+__PC_S_FLASH:
+	    ld a, b
+	    call FLASH_TMP
+	    ret
+__PC_S_BRIGHT:
+	    ld a, b
+	    call BRIGHT_TMP
+	    ret
+__PC_S_INVERSE:
+	    ld a, b
+	    call INVERSE_TMP
+	    ret
+__PC_S_OVER:
+	    ld a, b
+	    call OVER_TMP
+	    ret
+__PC_S_BOLD:
+	    ld a, b
+	    call BOLD_TMP
+	    ret
+__PC_S_ITALIC:
+	    ld a, b
+	    call ITALIC_TMP
+	    ret
+__PC_S_TAB1:            ; state 11: B = 1st TAB byte, stash it, arm state 12
+	    ld a, b
+	    ld (MEM0), a
+	    ld a, 12
+	    ld (PRINT_STATE), a
+	    ret
+__PC_S_TAB2:            ; state 12: B = 2nd TAB byte, ignored (matches zx48k)
+	    ld a, (MEM0)
+	    call PRINT_TAB
+	    ret
+__PC_STATE_TABLE:       ; indexed by PRINT_STATE (1-12; entry 0 unused)
+	    DW __PC_NOP         ;  0 (never dispatched)
+	    DW __PC_S_AT_ROW    ;  1
+	    DW __PC_S_AT_COL    ;  2
+	    DW __PC_S_INK       ;  3
+	    DW __PC_S_PAPER     ;  4
+	    DW __PC_S_FLASH     ;  5
+	    DW __PC_S_BRIGHT    ;  6
+	    DW __PC_S_INVERSE   ;  7
+	    DW __PC_S_OVER      ;  8
+	    DW __PC_S_BOLD      ;  9
+	    DW __PC_S_ITALIC    ; 10
+	    DW __PC_S_TAB1      ; 11
+	    DW __PC_S_TAB2      ; 12
+	    ENDP
+	; Called whenever a PRINT statement ends without a trailing ";".
+PRINT_EOL:
+	    jp __PRINT_NEWLINE
+; PRINT comma: tabs to the next half-screen zone (column 20), or to
+	; column 0 of the next line if already at or past column 20 -- half of
+	; the 40-column screen, the CPC-sized equivalent of zx48k's 16-column
+	; zones on its 32-column screen.
+PRINT_COMMA:
+	    PROC
+	    LOCAL __PCM_HIGH, __PCM_TARGET
+	    call __LOAD_S_POSN   ; E = current column (0-based)
+	    ld a, (TXT_COLS)
+    srl a                ; half the screen width: 10/20/40
+	    cp e
+	    jr z, __PCM_HIGH
+    jr nc, __PCM_TARGET  ; left half: tab to the middle
+__PCM_HIGH:
+    ld a, (TXT_COLS)     ; right half: PRINT_TAB's modulo wraps this to
+	                         ; a newline
+__PCM_TARGET:
+	    jp PRINT_TAB
+	    ENDP
+; Tabulates: prints spaces (via __PRINTCHAR, so the firmware's own
+	; wrap/scroll applies normally) until the column reaches A, modulo the
+	; current mode's width (TXT_COLS, colour.asm). If already there, does
+	; nothing.
+	;
+	; zx48k's own PRINT_TAB computes the same thing with `sub e` then `and
+; 31`: on its 32-column screen that's a valid mod-32 (32 is a power of
+	; 2, so AND-masking a two's-complement negative difference gives the
+	; correct positive modulo too). 40 is not a power of 2, so the
+	; equivalent `and 39` mask is *wrong* here -- e.g. a raw delta of 10
+; (0x0A) survives it unchanged (10 AND 39 = 2, not 10: 39 is 0b0100111,
+	; not 0b0100111...1, so it clears bit 3 too). Reduce the target
+	; explicitly modulo the width first, then wrap a negative difference by
+	; adding the width instead.
+PRINT_TAB:
+	    PROC
+	    LOCAL __PT_LOOP, __PT_REDUCE, __PT_GOTTARGET, __PT_POS
+	    ld hl, TXT_COLS
+__PT_REDUCE:            ; A (target column, as passed) mod TXT_COLS
+	    cp (hl)
+	    jr c, __PT_GOTTARGET
+	    sub (hl)
+	    jr __PT_REDUCE
+__PT_GOTTARGET:
+	    call __LOAD_S_POSN  ; E = current column (0-based); A (the reduced
+	                         ; target) survives the call -- see sposn.asm
+	    sub e                ; A = target - current, signed (|A| < 80)
+	    jp p, __PT_POS
+	    ld hl, TXT_COLS
+	    add a, (hl)           ; wrap a negative difference into the line
+__PT_POS:
+	    or a
+	    ret z
+	    ld b, a
+__PT_LOOP:
+	    ld a, ' '
+	    call __PRINTCHAR
+	    djnz __PT_LOOP
+	    ret
+	    ENDP
+; PRINT_AT: changes the cursor to ROW, COL (COL in A, ROW pushed on the
+	; stack -- the compiler's own calling convention for `PRINT AT r,c`,
+	; unchanged from zx48k). Row 0-24, column 0 to TXT_COLS-1 (0-19, 0-39
+; or 0-79 by mode; Boriel's 0-based convention). Out of range: __STOP (error.asm) sets ERR_NR and
+	; returns without moving the cursor -- the same "soft" behaviour
+	; zx48k's own in_screen.asm gives PRINT AT (unlike a hard runtime
+	; error, this does not print "Error n" or reset; the rest of the PRINT
+	; statement continues from wherever the cursor already was).
+PRINT_AT:
+	    PROC
+	    LOCAL __PA_ERR
+	    pop hl        ; return address
+	    ex (sp), hl   ; HL = pushed ROW word (H = ROW); stack top = return address
+	    ld l, a       ; L = COL
+	    ex de, hl     ; D = ROW, E = COL
+	    ld a, d
+	    cp SCR_ROWS
+	    jr nc, __PA_ERR
+	    ld a, (TXT_COLS)
+	    dec a
+	    cp e
+	    jr c, __PA_ERR        ; column > last column of the current mode
+	    call __SAVE_S_POSN
+#line 515 "src/lib/arch/cpc/runtime/print.asm"
+	    ret
+__PA_ERR:
+	    ld a, ERROR_OutOfScreen
+	    jp __STOP
+	    ENDP
+	    pop namespace
+#line 36 "tests/functional/arch/cpc/cpc_data.bas"
+#line 1 "src/lib/arch/zx48k/runtime/printu8.asm"
+#line 1 "src/lib/arch/zx48k/runtime/printi8.asm"
+#line 1 "src/lib/arch/zx48k/runtime/printnum.asm"
+#line 1 "src/lib/arch/cpc/runtime/attr.asm"
+; Phase-1 stub for zx48k/runtime/attr.asm (was: computing a Spectrum
+	; attribute cell address from screen coordinates and mixing a byte into
+	; it). The CPC has no per-cell attribute byte in memory (mode 1 colour
+	; comes from the palette + pixel bits), so this needs a real design, not
+	; just a relocated address -- SCREEN_ATTR_ADDR in sysvars.asm is only a
+	; placeholder until then. Reached from the ATTR()/SETATTR()/ATTRADDR()
+	; stdlib functions, and internally by sposn.asm, set_pixel_addr_attr.asm
+	; and print.asm.
+; TODO(cpc): Phase 4a -> a CPC-native colour-cell design.
+#line 1 "src/lib/arch/cpc/runtime/stub.asm"
+	; -----------------------------------------------------------------------
+	; Amstrad CPC -- shared "not implemented yet" target
+	;
+	; Runtime files ported from zx48k that are not yet implemented for the
+	; CPC (print.asm, plot.asm, error.asm, load.asm, ...) `jp
+	; .core.__CPC_NOT_IMPLEMENTED` instead of leaving a dangling reference or
+	; emitting incorrect Spectrum-specific code.
+	;
+	; This hangs the machine visibly (di + halt) rather than doing something
+	; wrong silently. It is deliberately distinct from END's `rst 0` (a full
+; firmware reset back to BASIC, see src/arch/cpc/backend/generic.py): a
+	; reset would look like the program finished normally, which would hide
+	; the bug this is meant to surface.
+	;
+; Phase-3 printer echo (-D __CPC_PRINTER_ECHO__): a hang looks the same
+	; from outside as a real timeout, so cpcbuild's cpcrun.py can only tell
+	; the two apart (both time out) unless the stub leaves a clue. Cheap to
+; do: print "NOT IMPLEMENTED" to the printer (MC_PRINT_CHAR &BD2B,
+	; direct gate calls -- print.asm isn't necessarily linked in) before the
+	; di/halt. Interrupts are still enabled at this point (the prologue's
+	; own `di` is long past, and nothing here disables them), so the gate's
+	; own `ei`/`di` bracket around each character is safe.
+#line 27 "src/lib/arch/cpc/runtime/stub.asm"
+	    push namespace core
+	; __CPC_NOT_IMPLEMENTED -- hangs the CPU. Nothing calls or returns from
+	; this; it is a dead end reached only by a `jp` from an unfinished stub.
+; Firmware entry called: none. Registers clobbered: none (never returns).
+__CPC_NOT_IMPLEMENTED:
+#line 61 "src/lib/arch/cpc/runtime/stub.asm"
+	    di
+	    halt
+#line 64 "src/lib/arch/cpc/runtime/stub.asm"
+	    pop namespace
+#line 12 "src/lib/arch/cpc/runtime/attr.asm"
+	    push namespace core
+__ATTR_ADDR:
+	    jp __CPC_NOT_IMPLEMENTED
+SET_ATTR:
+	    jp __CPC_NOT_IMPLEMENTED
+__SET_ATTR:
+	    jp __CPC_NOT_IMPLEMENTED
+__SET_ATTR2:
+	    jp __CPC_NOT_IMPLEMENTED
+	    pop namespace
+#line 3 "src/lib/arch/zx48k/runtime/printnum.asm"
+	    push namespace core
+__PRINTU_START:
+	    PROC
+	    LOCAL __PRINTU_CONT
+	    ld a, b
+	    or a
+	    jp nz, __PRINTU_CONT
+	    ld a, '0'
+	    jp __PRINT_DIGIT
+__PRINTU_CONT:
+	    pop af
+	    push bc
+	    call __PRINT_DIGIT
+	    pop bc
+	    djnz __PRINTU_CONT
+	    ret
+	    ENDP
+__PRINT_MINUS: ; PRINT the MINUS (-) sign. CALLER must preserve registers
+	    ld a, '-'
+	    jp __PRINT_DIGIT
+	__PRINT_DIGIT EQU __PRINTCHAR ; PRINTS the char in A register, and puts its attrs
+	    pop namespace
+#line 2 "src/lib/arch/zx48k/runtime/printi8.asm"
+#line 1 "src/lib/arch/zx48k/runtime/arith/div8.asm"
+	    ; --------------------------------
+	    push namespace core
+__DIVU8:	; 8 bit unsigned integer division
+	    ; Divides (Top of stack, High Byte) / A
+	    pop hl	; --------------------------------
+	    ex (sp), hl	; CALLEE
+__DIVU8_FAST:	; Does A / H
+	    ld l, h
+	    ld h, a		; At this point do H / L
+	    ld b, 8
+	    xor a		; A = 0, Carry Flag = 0
+__DIV8LOOP:
+	    sla	h
+	    rla
+	    cp	l
+	    jr	c, __DIV8NOSUB
+	    sub	l
+	    inc	h
+__DIV8NOSUB:
+	    djnz __DIV8LOOP
+	    ld	l, a		; save remainder
+	    ld	a, h		;
+	    ret			; a = Quotient,
+	    ; --------------------------------
+__DIVI8:		; 8 bit signed integer division Divides (Top of stack) / A
+	    pop hl		; --------------------------------
+	    ex (sp), hl
+__DIVI8_FAST:
+	    ld e, a		; store operands for later
+	    ld c, h
+	    or a		; negative?
+	    jp p, __DIV8A
+	    neg			; Make it positive
+__DIV8A:
+	    ex af, af'
+	    ld a, h
+	    or a
+	    jp p, __DIV8B
+	    neg
+	    ld h, a		; make it positive
+__DIV8B:
+	    ex af, af'
+	    call __DIVU8_FAST
+	    ld a, c
+	    xor l		; bit 7 of A = 1 if result is negative
+	    ld a, h		; Quotient
+	    ret p		; return if positive
+	    neg
+	    ret
+__MODU8:		; 8 bit module. REturns A mod (Top of stack) (unsigned operands)
+	    pop hl
+	    ex (sp), hl	; CALLEE
+__MODU8_FAST:	; __FASTCALL__ entry
+	    call __DIVU8_FAST
+	    ld a, l		; Remainder
+	    ret		; a = Modulus
+__MODI8:		; 8 bit module. REturns A mod (Top of stack) (For singed operands)
+	    pop hl
+	    ex (sp), hl	; CALLEE
+__MODI8_FAST:	; __FASTCALL__ entry
+	    call __DIVI8_FAST
+	    ld a, l		; remainder
+	    ret		; a = Modulus
+	    pop namespace
+#line 3 "src/lib/arch/zx48k/runtime/printi8.asm"
+	    push namespace core
+__PRINTI8:	; Prints an 8 bits number in Accumulator (A)
+	    ; Converts 8 to 32 bits
+	    or a
+	    jp p, __PRINTU8
+	    push af
+	    call __PRINT_MINUS
+	    pop af
+	    neg
+__PRINTU8:
+	    PROC
+	    LOCAL __PRINTU_LOOP
+	    ld b, 0 ; Counter
+__PRINTU_LOOP:
+	    or a
+	    jp z, __PRINTU_START
+	    push bc
+	    ld h, 10
+	    call __DIVU8_FAST ; Divides by 10. D'E'H'L' contains modulo (L' since < 10)
+	    pop bc
+	    ld a, l
+	    or '0'		  ; Stores ASCII digit (must be print in reversed order)
+	    push af
+	    ld a, h
+	    inc b
+	    jp __PRINTU_LOOP ; Uses JP in loops
+	    ENDP
+	    pop namespace
+#line 2 "src/lib/arch/zx48k/runtime/printu8.asm"
+#line 37 "tests/functional/arch/cpc/cpc_data.bas"
+#line 1 "src/lib/arch/zx48k/runtime/read_restore.asm"
+	;; This implements READ & RESTORE functions
+	;; Reads a new element from the DATA Address code
+	;; Updates the DATA_ADDR read ptr for the next read
+	;; Data codification is 1 byte for type followed by data bytes
+	;; Byte type is encoded as follows
+;; 00: End of data
+;; 01: String
+;; 02: Byte
+;; 03: Ubyte
+;; 04: Integer
+;; 05: UInteger
+;; 06: Long
+;; 07: ULong
+;; 08: Fixed
+;; 09: Float
+	;; bit7 is set for a parameter-less function
+	;; In that case, the next two bytes are the ptr of the function to jump
+#line 1 "src/lib/arch/zx48k/runtime/loadstr.asm"
+#line 1 "src/lib/arch/zx48k/runtime/mem/alloc.asm"
+; vim: ts=4:et:sw=4:
+	; Copyleft (K) by Jose M. Rodriguez de la Rosa
+	;  (a.k.a. Boriel)
+;  http://www.boriel.com
+	;
+	; This ASM library is licensed under the MIT license
+	; you can use it for any purpose (even for commercial
+	; closed source programs).
+	;
+	; Please read the MIT license on the internet
+	; ----- IMPLEMENTATION NOTES ------
+	; The heap is implemented as a linked list of free blocks.
+; Each free block contains this info:
+	;
+	; +----------------+ <-- HEAP START
+	; | Size (2 bytes) |
+	; |        0       | <-- Size = 0 => DUMMY HEADER BLOCK
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+ <-+
+	; | Size (2 bytes) |
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+   |
+	; | <free bytes...>|   | <-- If Size > 4, then this contains (size - 4) bytes
+	; | (0 if Size = 4)|   |
+	; +----------------+ <-+
+	; | Size (2 bytes) |
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+   |
+	; | <free bytes...>|   |
+	; | (0 if Size = 4)|   |
+	; +----------------+   |
+	;   <Allocated>        | <-- This zone is in use (Already allocated)
+	; +----------------+ <-+
+	; | Size (2 bytes) |
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+   |
+	; | <free bytes...>|   |
+	; | (0 if Size = 4)|   |
+	; +----------------+ <-+
+	; | Next (2 bytes) |--> NULL => END OF LIST
+	; |    0 = NULL    |
+	; +----------------+
+	; | <free bytes...>|
+	; | (0 if Size = 4)|
+	; +----------------+
+	; When a block is FREED, the previous and next pointers are examined to see
+	; if we can defragment the heap. If the block to be freed is just next to the
+	; previous, or to the next (or both) they will be converted into a single
+	; block (so defragmented).
+	;   MEMORY MANAGER
+	;
+	; This library must be initialized calling __MEM_INIT with
+	; HL = BLOCK Start & DE = Length.
+	; An init directive is useful for initialization routines.
+	; They will be added automatically if needed.
+#line 1 "src/lib/arch/zx48k/runtime/mem/heapinit.asm"
+; vim: ts=4:et:sw=4:
+	; Copyleft (K) by Jose M. Rodriguez de la Rosa
+	;  (a.k.a. Boriel)
+;  http://www.boriel.com
+	;
+	; This ASM library is licensed under the BSD license
+	; you can use it for any purpose (even for commercial
+	; closed source programs).
+	;
+	; Please read the BSD license on the internet
+	; ----- IMPLEMENTATION NOTES ------
+	; The heap is implemented as a linked list of free blocks.
+; Each free block contains this info:
+	;
+	; +----------------+ <-- HEAP START
+	; | Size (2 bytes) |
+	; |        0       | <-- Size = 0 => DUMMY HEADER BLOCK
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+ <-+
+	; | Size (2 bytes) |
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+   |
+	; | <free bytes...>|   | <-- If Size > 4, then this contains (size - 4) bytes
+	; | (0 if Size = 4)|   |
+	; +----------------+ <-+
+	; | Size (2 bytes) |
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+   |
+	; | <free bytes...>|   |
+	; | (0 if Size = 4)|   |
+	; +----------------+   |
+	;   <Allocated>        | <-- This zone is in use (Already allocated)
+	; +----------------+ <-+
+	; | Size (2 bytes) |
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+   |
+	; | <free bytes...>|   |
+	; | (0 if Size = 4)|   |
+	; +----------------+ <-+
+	; | Next (2 bytes) |--> NULL => END OF LIST
+	; |    0 = NULL    |
+	; +----------------+
+	; | <free bytes...>|
+	; | (0 if Size = 4)|
+	; +----------------+
+	; When a block is FREED, the previous and next pointers are examined to see
+	; if we can defragment the heap. If the block to be breed is just next to the
+	; previous, or to the next (or both) they will be converted into a single
+	; block (so defragmented).
+	;   MEMORY MANAGER
+	;
+	; This library must be initialized calling __MEM_INIT with
+	; HL = BLOCK Start & DE = Length.
+	; An init directive is useful for initialization routines.
+	; They will be added automatically if needed.
+	; ---------------------------------------------------------------------
+	;  __MEM_INIT must be called to initalize this library with the
+	; standard parameters
+	; ---------------------------------------------------------------------
+	    push namespace core
+__MEM_INIT: ; Initializes the library using (RAMTOP) as start, and
+	    ld hl, ZXBASIC_MEM_HEAP  ; Change this with other address of heap start
+	    ld de, ZXBASIC_HEAP_SIZE ; Change this with your size
+	; ---------------------------------------------------------------------
+	;  __MEM_INIT2 initalizes this library
+; Parameters:
+;   HL : Memory address of 1st byte of the memory heap
+;   DE : Length in bytes of the Memory Heap
+	; ---------------------------------------------------------------------
+__MEM_INIT2:
+	    ; HL as TOP
+	    PROC
+	    dec de
+	    dec de
+	    dec de
+	    dec de        ; DE = length - 4; HL = start
+	    ; This is done, because we require 4 bytes for the empty dummy-header block
+	    xor a
+	    ld (hl), a
+	    inc hl
+    ld (hl), a ; First "free" block is a header: size=0, Pointer=&(Block) + 4
+	    inc hl
+	    ld b, h
+	    ld c, l
+	    inc bc
+	    inc bc      ; BC = starts of next block
+	    ld (hl), c
+	    inc hl
+	    ld (hl), b
+	    inc hl      ; Pointer to next block
+	    ld (hl), e
+	    inc hl
+	    ld (hl), d
+	    inc hl      ; Block size (should be length - 4 at start); This block contains all the available memory
+	    ld (hl), a ; NULL (0000h) ; No more blocks (a list with a single block)
+	    inc hl
+	    ld (hl), a
+	    ld a, 201
+	    ld (__MEM_INIT), a; "Pokes" with a RET so ensure this routine is not called again
+	    ret
+	    ENDP
+	    pop namespace
+#line 70 "src/lib/arch/zx48k/runtime/mem/alloc.asm"
+	; ---------------------------------------------------------------------
+	; MEM_ALLOC
+	;  Allocates a block of memory in the heap.
+	;
+	; Parameters
+	;  BC = Length of requested memory block
+	;
+; Returns:
+	;  HL = Pointer to the allocated block in memory. Returns 0 (NULL)
+	;       if the block could not be allocated (out of memory)
+	; ---------------------------------------------------------------------
+	    push namespace core
+MEM_ALLOC:
+__MEM_ALLOC: ; Returns the 1st free block found of the given length (in BC)
+	    PROC
+	    LOCAL __MEM_LOOP
+	    LOCAL __MEM_DONE
+	    LOCAL __MEM_SUBTRACT
+	    LOCAL __MEM_START
+	    LOCAL TEMP, TEMP0
+	TEMP EQU TEMP0 + 1
+	    ld hl, 0
+	    ld (TEMP), hl
+__MEM_START:
+	    ld hl, ZXBASIC_MEM_HEAP  ; This label point to the heap start
+	    inc bc
+	    inc bc  ; BC = BC + 2 ; block size needs 2 extra bytes for hidden pointer
+__MEM_LOOP:  ; Loads lengh at (HL, HL+). If Lenght >= BC, jump to __MEM_DONE
+	    ld a, h ;  HL = NULL (No memory available?)
+	    or l
+#line 113 "src/lib/arch/zx48k/runtime/mem/alloc.asm"
+	    ret z ; NULL
+#line 115 "src/lib/arch/zx48k/runtime/mem/alloc.asm"
+	    ; HL = Pointer to Free block
+	    ld e, (hl)
+	    inc hl
+	    ld d, (hl)
+	    inc hl          ; DE = Block Length
+	    push hl         ; HL = *pointer to -> next block
+	    ex de, hl
+	    or a            ; CF = 0
+	    sbc hl, bc      ; FREE >= BC (Length)  (HL = BlockLength - Length)
+	    jp nc, __MEM_DONE
+	    pop hl
+	    ld (TEMP), hl
+	    ex de, hl
+	    ld e, (hl)
+	    inc hl
+	    ld d, (hl)
+	    ex de, hl
+	    jp __MEM_LOOP
+__MEM_DONE:  ; A free block has been found.
+	    ; Check if at least 4 bytes remains free (HL >= 4)
+	    push hl
+	    exx  ; exx to preserve bc
+	    pop hl
+	    ld bc, 4
+	    or a
+	    sbc hl, bc
+	    exx
+	    jp nc, __MEM_SUBTRACT
+	    ; At this point...
+	    ; less than 4 bytes remains free. So we return this block entirely
+	    ; We must link the previous block with the next to this one
+	    ; (DE) => Pointer to next block
+	    ; (TEMP) => &(previous->next)
+	    pop hl     ; Discard current block pointer
+	    push de
+	    ex de, hl  ; DE = Previous block pointer; (HL) = Next block pointer
+	    ld a, (hl)
+	    inc hl
+	    ld h, (hl)
+	    ld l, a    ; HL = (HL)
+	    ex de, hl  ; HL = Previous block pointer; DE = Next block pointer
+TEMP0:
+	    ld hl, 0   ; Pre-previous block pointer
+	    ld (hl), e
+	    inc hl
+	    ld (hl), d ; LINKED
+	    pop hl ; Returning block.
+	    ret
+__MEM_SUBTRACT:
+	    ; At this point we have to store HL value (Length - BC) into (DE - 2)
+	    ex de, hl
+	    dec hl
+	    ld (hl), d
+	    dec hl
+	    ld (hl), e ; Store new block length
+	    add hl, de ; New length + DE => free-block start
+	    pop de     ; Remove previous HL off the stack
+	    ld (hl), c ; Store length on its 1st word
+	    inc hl
+	    ld (hl), b
+	    inc hl     ; Return hl
+	    ret
+	    ENDP
+	    pop namespace
+#line 2 "src/lib/arch/zx48k/runtime/loadstr.asm"
+	; Loads a string (ptr) from HL
+	; and duplicates it on dynamic memory again
+	; Finally, it returns result pointer in HL
+	    push namespace core
+__ILOADSTR:		; This is the indirect pointer entry HL = (HL)
+	    ld a, h
+	    or l
+	    ret z
+	    ld a, (hl)
+	    inc hl
+	    ld h, (hl)
+	    ld l, a
+__LOADSTR:		; __FASTCALL__ entry
+	    ld a, h
+	    or l
+	    ret z	; Return if NULL
+	    ld c, (hl)
+	    inc hl
+	    ld b, (hl)
+	    dec hl  ; BC = LEN(a$)
+	    inc bc
+	    inc bc	; BC = LEN(a$) + 2 (two bytes for length)
+	    push hl
+	    push bc
+	    call __MEM_ALLOC
+	    pop bc  ; Recover length
+	    pop de  ; Recover origin
+	    ld a, h
+	    or l
+	    ret z	; Return if NULL (No memory)
+	    ex de, hl ; ldir takes HL as source, DE as destiny, so SWAP HL,DE
+	    push de	; Saves destiny start
+	    ldir	; Copies string (length number included)
+	    pop hl	; Recovers destiny in hl as result
+	    ret
+	    pop namespace
+#line 24 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 1 "src/lib/arch/zx48k/runtime/iload32.asm"
+	; __FASTCALL__ routine which
+	; loads a 32 bits integer into DE,HL
+	; stored at position pointed by POINTER HL
+	; DE,HL <-- (HL)
+	    push namespace core
+__ILOAD32:
+	    ld e, (hl)
+	    inc hl
+	    ld d, (hl)
+	    inc hl
+	    ld a, (hl)
+	    inc hl
+	    ld h, (hl)
+	    ld l, a
+	    ex de, hl
+	    ret
+	    pop namespace
+#line 25 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 1 "src/lib/arch/zx48k/runtime/iloadf.asm"
+	; __FASTCALL__ routine which
+	; loads a 40 bits floating point into A ED CB
+	; stored at position pointed by POINTER HL
+	;A DE, BC <-- ((HL))
+	    push namespace core
+__ILOADF:
+	    ld a, (hl)
+	    inc hl
+	    ld h, (hl)
+	    ld l, a
+	; __FASTCALL__ routine which
+	; loads a 40 bits floating point into A ED CB
+	; stored at position pointed by POINTER HL
+	;A DE, BC <-- (HL)
+__LOADF:    ; Loads a 40 bits FP number from address pointed by HL
+	    ld a, (hl)
+	    inc hl
+	    ld e, (hl)
+	    inc hl
+	    ld d, (hl)
+	    inc hl
+	    ld c, (hl)
+	    inc hl
+	    ld b, (hl)
+	    ret
+	    pop namespace
+#line 26 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 1 "src/lib/arch/zx48k/runtime/ftof16reg.asm"
+#line 1 "src/lib/arch/zx48k/runtime/ftou32reg.asm"
+#line 1 "src/lib/arch/zx48k/runtime/neg32.asm"
+	    push namespace core
+__ABS32:
+	    bit 7, d
+	    ret z
+__NEG32: ; Negates DEHL (Two's complement)
+	    ld a, l
+	    cpl
+	    ld l, a
+	    ld a, h
+	    cpl
+	    ld h, a
+	    ld a, e
+	    cpl
+	    ld e, a
+	    ld a, d
+	    cpl
+	    ld d, a
+	    inc l
+	    ret nz
+	    inc h
+	    ret nz
+	    inc de
+	    ret
+	    pop namespace
+#line 2 "src/lib/arch/zx48k/runtime/ftou32reg.asm"
+	    push namespace core
+__FTOU32REG:	; Converts a Float to (un)signed 32 bit integer (NOTE: It's ALWAYS 32 bit signed)
+	    ; Input FP number in A EDCB (A exponent, EDCB mantissa)
+    ; Output: DEHL 32 bit number (signed)
+	    PROC
+	    LOCAL __IS_FLOAT
+	    LOCAL __NEGATE
+	    or a
+	    jr nz, __IS_FLOAT
+	    ; Here if it is a ZX ROM Integer
+	    ld h, c
+	    ld l, d
+	    ld d, e
+	    ret
+__IS_FLOAT:  ; Jumps here if it is a true floating point number
+	    ld h, e
+	    push hl  ; Stores it for later (Contains Sign in H)
+	    push de
+	    push bc
+	    exx
+	    pop de   ; Loads mantissa into C'B' E'D'
+	    pop bc	 ;
+	    set 7, c ; Highest mantissa bit is always 1
+	    exx
+	    ld hl, 0 ; DEHL = 0
+	    ld d, h
+	    ld e, l
+	    ;ld a, c  ; Get exponent
+	    sub 128  ; Exponent -= 128
+	    jr z, __FTOU32REG_END	; If it was <= 128, we are done (Integers must be > 128)
+	    jr c, __FTOU32REG_END	; It was decimal (0.xxx). We are done (return 0)
+	    ld b, a  ; Loop counter = exponent - 128
+__FTOU32REG_LOOP:
+	    exx 	 ; Shift C'B' E'D' << 1, output bit stays in Carry
+	    sla d
+	    rl e
+	    rl b
+	    rl c
+	    exx		 ; Shift DEHL << 1, inserting the carry on the right
+	    rl l
+	    rl h
+	    rl e
+	    rl d
+	    djnz __FTOU32REG_LOOP
+__FTOU32REG_END:
+	    pop af   ; Take the sign bit
+	    or a	 ; Sets SGN bit to 1 if negative
+	    jp m, __NEGATE ; Negates DEHL
+	    ret
+__NEGATE:
+	    exx
+	    ld a, d
+	    or e
+	    or b
+	    or c
+	    exx
+	    jr z, __END
+	    inc l
+	    jr nz, __END
+	    inc h
+	    jr nz, __END
+	    inc de
+	LOCAL __END
+__END:
+	    jp __NEG32
+	    ENDP
+__FTOU8:	; Converts float in C ED LH to Unsigned byte in A
+	    call __FTOU32REG
+	    ld a, l
+	    ret
+	    pop namespace
+#line 2 "src/lib/arch/zx48k/runtime/ftof16reg.asm"
+	    push namespace core
+__FTOF16REG:	; Converts a Float to 16.16 (32 bit) fixed point decimal
+	    ; Input FP number in A EDCB (A exponent, EDCB mantissa)
+	    ld l, a     ; Saves exponent for later
+	    or d
+	    or e
+	    or b
+	    or c
+	    ld h, e
+	    ret z		; Return if ZERO
+	    push hl  ; Stores it for later (Contains sign in H, exponent in L)
+	    push de
+	    push bc
+	    exx
+	    pop de   ; Loads mantissa into C'B' E'D'
+	    pop bc	 ;
+	    set 7, c ; Highest mantissa bit is always 1
+	    exx
+	    ld hl, 0 ; DEHL = 0
+	    ld d, h
+	    ld e, l
+	    pop bc
+	    ld a, c  ; Get exponent
+	    sub 112  ; Exponent -= 128 + 16
+	    push bc  ; Saves sign in b again
+	    jp z, __FTOU32REG_END	; If it was <= 128, we are done (Integers must be > 128)
+	    jp c, __FTOU32REG_END	; It was decimal (0.xxx). We are done (return 0)
+	    ld b, a  ; Loop counter = exponent - 128 + 16 (we need to shift 16 bit more)
+	    jp __FTOU32REG_LOOP ; proceed as an u32 integer
+	    pop namespace
+#line 27 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 1 "src/lib/arch/zx48k/runtime/f16tofreg.asm"
+#line 1 "src/lib/arch/zx48k/runtime/u32tofreg.asm"
+	    push namespace core
+__I8TOFREG:
+	    ld l, a
+	    rlca
+	    sbc a, a	; A = SGN(A)
+	    ld h, a
+	    ld e, a
+	    ld d, a
+__I32TOFREG:	; Converts a 32bit signed integer (stored in DEHL)
+	    ; to a Floating Point Number returned in (A ED CB)
+	    ld a, d
+	    or a		; Test sign
+	    jp p, __U32TOFREG	; It was positive, proceed as 32bit unsigned
+	    call __NEG32		; Convert it to positive
+	    call __U32TOFREG	; Convert it to Floating point
+	    set 7, e			; Put the sign bit (negative) in the 31bit of mantissa
+	    ret
+__U8TOFREG:
+	    ; Converts an unsigned 8 bit (A) to Floating point
+	    ld l, a
+	    ld h, 0
+	    ld e, h
+	    ld d, h
+__U32TOFREG:	; Converts an unsigned 32 bit integer (DEHL)
+	    ; to a Floating point number returned in A ED CB
+	    PROC
+	    LOCAL __U32TOFREG_END
+	    ld a, d
+	    or e
+	    or h
+	    or l
+	    ld b, d
+	    ld c, e		; Returns 00 0000 0000 if ZERO
+	    ret z
+	    push de
+	    push hl
+	    exx
+	    pop de  ; Loads integer into B'C' D'E'
+	    pop bc
+	    exx
+	    ld l, 128	; Exponent
+	    ld bc, 0	; DEBC = 0
+	    ld d, b
+	    ld e, c
+__U32TOFREG_LOOP: ; Also an entry point for __F16TOFREG
+	    exx
+	    ld a, d 	; B'C'D'E' == 0 ?
+	    or e
+	    or b
+	    or c
+	    jp z, __U32TOFREG_END	; We are done
+	    srl b ; Shift B'C' D'E' >> 1, output bit stays in Carry
+	    rr c
+	    rr d
+	    rr e
+	    exx
+	    rr e ; Shift EDCB >> 1, inserting the carry on the left
+	    rr d
+	    rr c
+	    rr b
+	    inc l	; Increment exponent
+	    jp __U32TOFREG_LOOP
+__U32TOFREG_END:
+	    exx
+	    ld a, l     ; Puts the exponent in a
+	    res 7, e	; Sets the sign bit to 0 (positive)
+	    ret
+	    ENDP
+	    pop namespace
+#line 3 "src/lib/arch/zx48k/runtime/f16tofreg.asm"
+	    push namespace core
+__F16TOFREG:	; Converts a 16.16 signed fixed point (stored in DEHL)
+	    ; to a Floating Point Number returned in (C ED CB)
+	    PROC
+	    LOCAL __F16TOFREG2
+	    ld a, d
+	    or a		; Test sign
+	    jp p, __F16TOFREG2	; It was positive, proceed as 32bit unsigned
+	    call __NEG32		; Convert it to positive
+	    call __F16TOFREG2	; Convert it to Floating point
+	    set 7, e			; Put the sign bit (negative) in the 31bit of mantissa
+	    ret
+__F16TOFREG2:	; Converts an unsigned 32 bit integer (DEHL)
+	    ; to a Floating point number returned in C DE HL
+	    ld a, d
+	    or e
+	    or h
+	    or l
+	    ld b, h
+	    ld c, l
+	    ret z       ; Return 00 0000 0000 if 0
+	    push de
+	    push hl
+	    exx
+	    pop de  ; Loads integer into B'C' D'E'
+	    pop bc
+	    exx
+	    ld l, 112	; Exponent
+	    ld bc, 0	; DEBC = 0
+	    ld d, b
+	    ld e, c
+	    jp __U32TOFREG_LOOP ; Proceed as an integer
+	    ENDP
+	    pop namespace
+#line 28 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 1 "src/lib/arch/zx48k/runtime/mem/free.asm"
+; vim: ts=4:et:sw=4:
+	; Copyleft (K) by Jose M. Rodriguez de la Rosa
+	;  (a.k.a. Boriel)
+;  http://www.boriel.com
+	;
+	; This ASM library is licensed under the BSD license
+	; you can use it for any purpose (even for commercial
+	; closed source programs).
+	;
+	; Please read the BSD license on the internet
+	; ----- IMPLEMENTATION NOTES ------
+	; The heap is implemented as a linked list of free blocks.
+; Each free block contains this info:
+	;
+	; +----------------+ <-- HEAP START
+	; | Size (2 bytes) |
+	; |        0       | <-- Size = 0 => DUMMY HEADER BLOCK
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+ <-+
+	; | Size (2 bytes) |
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+   |
+	; | <free bytes...>|   | <-- If Size > 4, then this contains (size - 4) bytes
+	; | (0 if Size = 4)|   |
+	; +----------------+ <-+
+	; | Size (2 bytes) |
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+   |
+	; | <free bytes...>|   |
+	; | (0 if Size = 4)|   |
+	; +----------------+   |
+	;   <Allocated>        | <-- This zone is in use (Already allocated)
+	; +----------------+ <-+
+	; | Size (2 bytes) |
+	; +----------------+
+	; | Next (2 bytes) |---+
+	; +----------------+   |
+	; | <free bytes...>|   |
+	; | (0 if Size = 4)|   |
+	; +----------------+ <-+
+	; | Next (2 bytes) |--> NULL => END OF LIST
+	; |    0 = NULL    |
+	; +----------------+
+	; | <free bytes...>|
+	; | (0 if Size = 4)|
+	; +----------------+
+	; When a block is FREED, the previous and next pointers are examined to see
+	; if we can defragment the heap. If the block to be breed is just next to the
+	; previous, or to the next (or both) they will be converted into a single
+	; block (so defragmented).
+	;   MEMORY MANAGER
+	;
+	; This library must be initialized calling __MEM_INIT with
+	; HL = BLOCK Start & DE = Length.
+	; An init directive is useful for initialization routines.
+	; They will be added automatically if needed.
+	; ---------------------------------------------------------------------
+	; MEM_FREE
+	;  Frees a block of memory
+	;
+; Parameters:
+	;  HL = Pointer to the block to be freed. If HL is NULL (0) nothing
+	;  is done
+	; ---------------------------------------------------------------------
+	    push namespace core
+MEM_FREE:
+__MEM_FREE: ; Frees the block pointed by HL
+	    ; HL DE BC & AF modified
+	    PROC
+	    LOCAL __MEM_LOOP2
+	    LOCAL __MEM_LINK_PREV
+	    LOCAL __MEM_JOIN_TEST
+	    LOCAL __MEM_BLOCK_JOIN
+	    ld a, h
+	    or l
+	    ret z       ; Return if NULL pointer
+	    dec hl
+	    dec hl
+	    ld b, h
+	    ld c, l    ; BC = Block pointer
+	    ld hl, ZXBASIC_MEM_HEAP  ; This label point to the heap start
+__MEM_LOOP2:
+	    inc hl
+	    inc hl     ; Next block ptr
+	    ld e, (hl)
+	    inc hl
+	    ld d, (hl) ; Block next ptr
+	    ex de, hl  ; DE = &(block->next); HL = block->next
+	    ld a, h    ; HL == NULL?
+	    or l
+	    jp z, __MEM_LINK_PREV; if so, link with previous
+	    or a       ; Clear carry flag
+	    sbc hl, bc ; Carry if BC > HL => This block if before
+	    add hl, bc ; Restores HL, preserving Carry flag
+	    jp c, __MEM_LOOP2 ; This block is before. Keep searching PASS the block
+	;------ At this point current HL is PAST BC, so we must link (DE) with BC, and HL in BC->next
+__MEM_LINK_PREV:    ; Link (DE) with BC, and BC->next with HL
+	    ex de, hl
+	    push hl
+	    dec hl
+	    ld (hl), c
+	    inc hl
+	    ld (hl), b ; (DE) <- BC
+	    ld h, b    ; HL <- BC (Free block ptr)
+	    ld l, c
+	    inc hl     ; Skip block length (2 bytes)
+	    inc hl
+	    ld (hl), e ; Block->next = DE
+	    inc hl
+	    ld (hl), d
+	    ; --- LINKED ; HL = &(BC->next) + 2
+	    call __MEM_JOIN_TEST
+	    pop hl
+__MEM_JOIN_TEST:   ; Checks for fragmented contiguous blocks and joins them
+	    ; hl = Ptr to current block + 2
+	    ld d, (hl)
+	    dec hl
+	    ld e, (hl)
+	    dec hl
+	    ld b, (hl) ; Loads block length into BC
+	    dec hl
+	    ld c, (hl) ;
+	    push hl    ; Saves it for later
+	    add hl, bc ; Adds its length. If HL == DE now, it must be joined
+	    or a
+	    sbc hl, de ; If Z, then HL == DE => We must join
+	    pop hl
+	    ret nz
+__MEM_BLOCK_JOIN:  ; Joins current block (pointed by HL) with next one (pointed by DE). HL->length already in BC
+	    push hl    ; Saves it for later
+	    ex de, hl
+	    ld e, (hl) ; DE -> block->next->length
+	    inc hl
+	    ld d, (hl)
+	    inc hl
+	    ex de, hl  ; DE = &(block->next)
+	    add hl, bc ; HL = Total Length
+	    ld b, h
+	    ld c, l    ; BC = Total Length
+	    ex de, hl
+	    ld e, (hl)
+	    inc hl
+	    ld d, (hl) ; DE = block->next
+	    pop hl     ; Recovers Pointer to block
+	    ld (hl), c
+	    inc hl
+	    ld (hl), b ; Length Saved
+	    inc hl
+	    ld (hl), e
+	    inc hl
+	    ld (hl), d ; Next saved
+	    ret
+	    ENDP
+	    pop namespace
+#line 29 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 31 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 32 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 33 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 34 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 35 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 36 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 37 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 38 "src/lib/arch/zx48k/runtime/read_restore.asm"
+#line 39 "src/lib/arch/zx48k/runtime/read_restore.asm"
+	;; Updates restore point to the given HL mem. address
+	    push namespace core
+__RESTORE:
+	    PROC
+	    LOCAL __DATA_ADDR
+	    ld (__DATA_ADDR), hl
+	    ret
+	;; Reads a value from the DATA mem area and updates __DATA_ADDR ptr to the
+	;; next item. On Out Of Data, restarts
+	;;
+__READ:
+	    LOCAL read_restart, cont, cont2, table, no_func
+	    LOCAL dynamic_cast, dynamic_cast2, dynamic_cast3, dynamic_cast4
+	    LOCAL _decode_table, coerce_to_int, coerce_to_int2, promote_to_i16
+	    LOCAL _from_i8, _from_u8
+	    LOCAL _from_i16, _from_u16
+	    LOCAL _from_i32, _from_u32
+	    LOCAL _from_fixed, __data_error
+	    push af  ; type of data to read
+	    ld hl, (__DATA_ADDR)
+read_restart:
+	    ld a, (hl)
+	    or a   ; 0 => OUT of data
+	    jr nz, cont
+	    ;; Signals out of data
+	    ld hl, .DATA.__DATA__0
+	    ld (__DATA_ADDR), hl
+	    jr read_restart  ; Start again
+cont:
+	    and 0x80
+	    ld a, (hl)
+	    push af
+	    jp z, no_func    ;; Loads data directly, not a function
+	    inc hl
+	    ld e, (hl)
+	    inc hl
+	    ld d, (hl)
+	    inc hl
+	    ld (__DATA_ADDR), hl  ;; Store address of next DATA
+	    ex de, hl
+cont2:
+	    ld de, dynamic_cast
+	    push de  ; ret address
+	    jp (hl)  ; "call (hl)"
+	    ;; Now tries to convert the given result to the expected type or raise an error
+dynamic_cast:
+	    exx
+	    ex af, af'
+	    pop af   ; type READ
+	    and 0x7F ; clear bit 7
+	    pop hl   ; type requested by USER (type of the READ variable)
+	    ld c, h  ; save requested type (save it in register C)
+	    cp h
+	    exx
+	    jr nz, dynamic_cast2  ; Types are identical?
+	    ;; yes, they are
+	    ex af, af'
+	    ret
+dynamic_cast2:
+	    cp 1             ; Requested a number, but read a string?
+	    jr nz, dynamic_cast3
+	    call __MEM_FREE     ; Frees str from memory
+	    jr __data_error
+dynamic_cast3:
+	    exx
+	    ld b, a     ; Read type
+	    ld a, c     ; Requested type
+	    cp 1
+	    jr z, __data_error
+	    cp b
+	    jr c, dynamic_cast4
+	    ;; here the user expected type is "larger" than the read one
+	    ld a, b
+	    sub 2
+	    add a, a
+	    ld l, a
+	    ld h, 0
+	    ld de, _decode_table
+	    add hl, de
+	    ld e, (hl)
+	    inc hl
+	    ld h, (hl)
+	    ld l, e
+	    push hl
+	    ld a, c     ; Requested type
+	    exx
+	    ret
+__data_error:
+	    ;; When a data is read, but cannot be converted to the requested type
+	    ;; that is, the user asked for a string and we read a number or vice versa
+	    ld a, ERROR_InvalidArg
+	    call __STOP  ; The user expected a string, but read a number
+	    xor a
+	    ld h, a
+	    ld l, a
+	    ld e, a
+	    ld d, a
+	    ld b, a
+	    ld c, a
+	    ret
+_decode_table:
+	    dw _from_i8
+	    dw _from_u8
+	    dw _from_i16
+	    dw _from_u16
+	    dw _from_i32
+	    dw _from_u32
+	    dw _from_fixed
+_from_i8:
+	    cp 4
+	    jr nc, promote_to_i16
+	    ex af, af'
+	    ret     ;; Was from Byte to Ubyte
+promote_to_i16:
+	    ex af, af'
+	    ld l, a
+	    rla
+	    sbc a, a
+	    ld h, a     ; copy sgn to h
+	    ex af, af'
+	    jr _before_from_i16
+_from_u8:
+	    ex af, af'
+	    ld l, a
+	    ld h, 0
+	    ex af, af'
+	    ;; Promoted to i16
+_before_from_i16:
+_from_i16:
+	    cp 6
+	    ret c  ;; from i16 to u16
+	    ;; Promote i16 to i32
+	    ex af, af'
+	    ld a, h
+	    rla
+	    sbc a, a
+	    ld e, a
+	    ld d, a
+	    ex af, af'
+_from_i32:
+	    cp 7
+	    ret z ;; From i32 to u32
+	    ret c ;; From u16 to i32
+	    cp 9
+	    jp z, __I32TOFREG
+_from_u32:
+	    cp 9
+	    jp z, __U32TOFREG
+	    ex de, hl
+	    ld hl, 0
+	    cp 8
+	    ret z
+_from_fixed:  ;; From fixed to float
+	    jp __F16TOFREG
+_from_u16:
+	    ld de, 0    ; HL 0x0000 => 32 bits
+	    jp _from_i32
+dynamic_cast4:
+	    ;; The user type is "shorter" than the read one
+	    ld a, b ;; read type
+	    cp 4 ;; if user type < read type < _i16 => From Ubyte to Byte. Return af'
+	    jr nc, 1f
+	    ex af, af'
+	    ret
+1:
+	    ld a, c ;; recover user required type
+	    cp 8 ;; required type
+	    jr c, before_to_int  ;; required < fixed (f16)
+	    ex af, af'
+	    exx     ;; Ok, we must convert from float to f16
+	    jp __FTOF16REG
+before_to_int:
+	    ld a, b ;; read type
+	    cp 8 ;;
+	    jr c, coerce_to_int2
+	    jr nz, coerce_to_int  ;; From float to int
+	    ld a, c ;; user type
+	    exx
+	    ;; f16 to Long
+	    ex de, hl
+	    ld a, h
+	    rla
+	    sbc a, a
+	    ld d, a
+	    ld e, a
+	    exx
+	    jr coerce_to_int2
+coerce_to_int:
+	    exx
+	    ex af, af'
+	    call __FTOU32REG
+	    ex af, af'   ; a contains user type
+	    exx
+coerce_to_int2:  ; At this point we have an u/integer in hl
+	    exx
+	    cp 4
+	    ret nc       ; Already done. Return the result
+	    ld a, l      ; Truncate to byte
+	    ret
+no_func:
+	    exx
+	    ld de, dynamic_cast
+	    push de ; Ret address
+	    dec a        ; 0 => string; 1, 2 => byte; 3, 4 => integer; 5, 6 => long, 7 => fixed; 8 => float
+	    ld h, 0
+	    add a, a
+	    ld l, a
+	    ld de, table
+	    add hl, de
+	    ld e, (hl)
+	    inc hl
+	    ld h, (hl)
+	    ld l, e
+	    push hl ; address to jump to
+	    exx
+	    inc hl
+	    ret     ; jp (sp)  => jump to table[a - 1]
+table:
+	    LOCAL __01_decode_string
+	    LOCAL __02_decode_byte
+	    LOCAL __03_decode_ubyte
+	    LOCAL __04_decode_integer
+	    LOCAL __05_decode_uinteger
+	    LOCAL __06_decode_long
+	    LOCAL __07_decode_ulong
+	    LOCAL __08_decode_fixed
+	    LOCAL __09_decode_float
+	    ;; 1 -> Decode string
+	    ;; 2, 3 -> Decode Byte, UByte
+	    ;; 4, 5 -> Decode Integer, UInteger
+	    ;; 6, 7 -> Decode Long, ULong
+	    ;; 8 -> Decode Fixed
+	    ;; 9 -> Decode Float
+	    dw __01_decode_string
+	    dw __02_decode_byte
+	    dw __03_decode_ubyte
+	    dw __04_decode_integer
+	    dw __05_decode_uinteger
+	    dw __06_decode_long
+	    dw __07_decode_ulong
+	    dw __08_decode_fixed
+	    dw __09_decode_float
+__01_decode_string:
+	    ld e, (hl)
+	    inc hl
+	    ld d, (hl)
+	    inc hl
+	    ld (__DATA_ADDR), hl  ;; Store address of next DATA
+	    ex de, hl
+	    jp __LOADSTR
+__02_decode_byte:
+__03_decode_ubyte:
+	    ld a, (hl)
+	    inc hl
+	    ld (__DATA_ADDR), hl
+	    ret
+__04_decode_integer:
+__05_decode_uinteger:
+	    ld e, (hl)
+	    inc hl
+	    ld d, (hl)
+	    inc hl
+	    ld (__DATA_ADDR), hl
+	    ex de, hl
+	    ret
+__06_decode_long:
+__07_decode_ulong:
+__08_decode_fixed:
+	    ld b, h
+	    ld c, l
+	    inc bc
+	    inc bc
+	    inc bc
+	    inc bc
+	    ld (__DATA_ADDR), bc
+	    jp __ILOAD32
+__09_decode_float:
+	    call __LOADF
+	    inc hl
+	    ld (__DATA_ADDR), hl
+	    ld h, a  ; returns A in H; sets A free
+	    ret
+__DATA_ADDR:  ;; Stores current DATA ptr
+	    dw .DATA.__DATA__0
+	    ENDP
+	    pop namespace
+#line 38 "tests/functional/arch/cpc/cpc_data.bas"
+	END

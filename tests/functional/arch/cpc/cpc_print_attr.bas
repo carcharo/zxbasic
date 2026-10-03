@@ -1,0 +1,2 @@
+' PRINT AT / INK / PAPER.
+PRINT AT 2, 3; INK 2; PAPER 1; "Hi"

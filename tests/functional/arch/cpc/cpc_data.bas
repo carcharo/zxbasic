@@ -1,0 +1,7 @@
+' DATA / READ / RESTORE.
+DIM x, y AS UBYTE
+READ x, y
+RESTORE
+READ x
+PRINT x; y
+DATA 1, 2, 3
