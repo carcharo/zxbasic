@@ -150,6 +150,34 @@ therefore keep running during compiled code. Cost: about 12 % of the CPU in
 all (about 2 % is the front-end, the rest the firmware's own work), more with
 sound envelopes playing (up to about 23 % measured with three channels).
 
+**Frame hook and game mode (optional, `#include <framehook.bas>`).**
+
+| Call | What it does |
+|---|---|
+| `FrameHook(addr)` | the machine-code routine at `addr` runs once per frame, at the frame flyback |
+| `FrameHookOff()` | stops it |
+| `Frames()` | frames since the program started (`ULONG`) |
+| `GameMode(1)` / `GameMode(0)` | game mode on / off |
+
+The hook runs in every mode, also while the program waits inside a firmware
+call (WaitRetrace, PRINT), exactly once per frame. It runs with interrupts off
+and all registers (including IX, IY and the alternate bank) saved, so it may
+use any of them; it must not call the firmware (the gate turns interrupts on),
+PRINT, or use floats or strings. Write it in asm and pass its address, e.g. a
+BASIC label in front of an `ASM` block (`FrameHook(@myhook)`). It is a
+firmware frame-flyback event with a far address and ROM select &FF, so it can
+live anywhere in the program.
+
+Game mode makes interrupts outside firmware calls skip the firmware's handler:
+the interrupt load drops from about 14.5 % to about 3.3 % of the CPU (busy-loop
+measurement). While in game mode and not inside a firmware call, the
+firmware's key buffer (INKEY$), its 300 Hz clock, its sound queue (BEEP,
+`SoundQueue`) and its ink refresh stop; firmware calls themselves still work.
+Use a direct keyboard scan, `Frames()` and the hook instead. The cpcbuild
+library's music player runs on this hook
+([library reference](https://github.com/carcharo/cpcbuild/blob/main/docs/library.md),
+section 7.8).
+
 **Rules for inline `asm`:**
 
 1. Call the firmware only through `.core.__FW_CALL` (or `__FW_CALL_IX`). Never
@@ -321,12 +349,18 @@ AY clock, timing for the CPC (tempo within 0.6 % in tests), and a mixer value
 that keeps register 7 bit 6 clear. Play runs its whole tune with interrupts
 off, so the keyboard and the firmware clock stop until it returns.
 
+**Music and sound effects (Arkos Tracker).** The cpcbuild library includes an
+interrupt-driven music player (Arkos Tracker 3.7, MIT licensed) that plays songs
+and sound effects from the frame hook. The player is built into `<music/music.bas>`
+in the cpcbuild repository; it is not part of the compiler fork. See
+[cpcbuild's library reference](https://github.com/carcharo/cpcbuild/blob/main/docs/library.md) section 7.9.
+
 **One owner of the sound chip.** Either the firmware sound manager (BEEP,
-`SoundQueue`) or direct access (`AyWrite`, Play) owns the AY in a program at
-any one time, never both. Play calls the firmware's SOUND_RESET once so the
+`SoundQueue`), the music player, or direct access (`AyWrite`, Play) owns the AY
+at any one time, never more than one. The music player calls `SoundStop` so the
 manager is idle. After using Play or AyWrite, call `SoundStop` before going
-back to BEEP or `SoundQueue`, and never queue firmware sounds while Play or
-AyWrite are in use. After Play returns, BEEP works again.
+back to BEEP or `SoundQueue`, and never queue firmware sounds while another owner
+is in use. After Play returns, BEEP works again.
 
 ## Floating point
 
@@ -409,6 +443,7 @@ Files in `src/lib/arch/cpc/stdlib/`:
 | File | Purpose |
 |---|---|
 | `cpc.bas` | `Mode`, `GetMode`, `SetInk`, `SetBorder`, `WaitVsync`, `AyWrite`, `AyRead`, and the firmware sound calls `SoundQueue`, `SoundFree`, `SoundBusy`, `SoundEnvelope`, `SoundStop`. |
+| `framehook.bas` | `FrameHook(addr)`, `FrameHookOff()`, `Frames()`, `GameMode(on)`: an interrupt-driven frame hook (machine code that runs once per frame with interrupts off and registers saved) and opt-in game mode (firmware interrupt work off outside firmware calls). |
 | `cpcbuild.bas` | The cpcbuild library: includes the six files below. |
 | `cpcbuild/display.bas` | Frame sync, double buffering, `PokeScreen`, `PeekScreen`. |
 | `cpcbuild/sprites.bas` | `PutSprite`, `PutSpriteMasked`, `GetBlock`, clipped. |
