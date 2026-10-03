@@ -86,6 +86,9 @@ __KS_LOOP:
     ret
     ENDP
 
+#ifndef CPC_BAREMETAL
+; (Bare-metal mode: the translation below uses the firmware's tables;
+; bare mode has its own -- Phase 6 B3.)
 ; __CPC_KEYCHAR -- the character the firmware's own key translation
 ; gives a key. Respects the machine's layout (KEY tables set with
 ; KM_SET_TRANSLATE and friends), the shift lock and the caps lock.
@@ -246,6 +249,7 @@ __KH_NEXTROW:
     jr   c, __KH_ROW
     ret                     ; no key: Carry clear (cp 80 with A >= 80)
     ENDP
+#endif
 
 ; __CPC_KEYS -- the last scan, rows 0-9, one byte each, bit = 1: pressed.
 __CPC_KEYS:

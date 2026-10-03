@@ -50,12 +50,36 @@ _STACK_TOP = 0xA600  # SP set here by the prologue; stack occupies $A200-$A5FF
 _MEM_TOP = 0xA67B  # boot HIMEM with AMSDOS (measured); code+data must end at
 # or below this
 
+# Bare-metal mode (-D CPC_BAREMETAL, Phase 6): no firmware, so its area at
+# $A000-$BFFF is ours. Layout: code + data + heap up to $B7FF, stack
+# $B800-$BBFF, private block $BC00-$BFFF, screen from $C000.
+_BARE_PRIV_BASE = 0xBC00
+_BARE_STACK_TOP = 0xBC00  # stack $B800-$BBFF
+_BARE_CODE_TOP = 0xB800  # code+data+heap must end below this
+_BARE_MEM_TOP = 0xBFFF
+
+
+def _baremetal() -> bool:
+    """True when the program is compiled with -D CPC_BAREMETAL."""
+    return "CPC_BAREMETAL" in getattr(OPTIONS, "__DEFINES", {})
+
+
+def _layout() -> tuple[int, int, int, int]:
+    """(private block base, stack top, memory top, code limit) for the
+    current mode: the firmware layout, or the bare-metal one."""
+    if _baremetal():
+        return _BARE_PRIV_BASE, _BARE_STACK_TOP, _BARE_MEM_TOP, _BARE_CODE_TOP
+    return _PRIV_BASE, _STACK_TOP, _MEM_TOP, _PRIV_BASE
+
 
 class Backend(Z80Backend):
-    # Code+data must stay below the private runtime block, whether or not
-    # a heap is in use (see the memory map above). Checked by zxbc's
-    # generic post-assembly memory-layout check.
-    MAX_CODE_ADDRESS = _PRIV_BASE
+    # Code+data must stay below the private runtime block (firmware
+    # layout) or the stack (bare-metal layout), whether or not a heap is in
+    # use (see the memory map above). Checked by zxbc's generic
+    # post-assembly memory-layout check.
+    @property
+    def MAX_CODE_ADDRESS(self) -> int:
+        return _layout()[3]
 
     # Code must start at or above $0040: $0000-$003F are the restarts (the
     # firmware's, plus our RST 6 FP-calculator jump at $0030 and IM 1
@@ -113,7 +137,7 @@ class Backend(Z80Backend):
             # the private runtime block (a None heap_address would make the
             # prologue emit the heap inline as DEFS in the binary).
             if "heap_address" not in OPTIONS.cli_overrides:
-                OPTIONS.heap_address = _PRIV_BASE - OPTIONS.heap_size
+                OPTIONS.heap_address = _layout()[3] - OPTIONS.heap_size
 
         self._QUAD_TABLE.update(
             {
@@ -149,10 +173,11 @@ class Backend(Z80Backend):
 
         # Memory-map constants for runtime .asm files (sysvars.asm,
         # bootstrap.asm, ...) instead of hard-coding these numbers.
-        output.append(f"{NAMESPACE}.CPC_PRIV_BASE EQU {_PRIV_BASE}")
+        priv_base, stack_top, mem_top, _code_top = _layout()
+        output.append(f"{NAMESPACE}.CPC_PRIV_BASE EQU {priv_base}")
         output.append(f"{NAMESPACE}.CPC_PRIV_SIZE EQU {_PRIV_SIZE}")
-        output.append(f"{NAMESPACE}.CPC_STACK_TOP EQU {_STACK_TOP}")
-        output.append(f"{NAMESPACE}.CPC_MEM_TOP EQU {_MEM_TOP}")
+        output.append(f"{NAMESPACE}.CPC_STACK_TOP EQU {stack_top}")
+        output.append(f"{NAMESPACE}.CPC_MEM_TOP EQU {mem_top}")
 
         if common.REQUIRES.intersection(common.MEMINITS) or f"{NAMESPACE}.__MEM_INIT" in common.INITS:
             heap_init.append("; Defines HEAP SIZE\n" + OPTIONS.heap_size_label + " EQU " + str(OPTIONS.heap_size))

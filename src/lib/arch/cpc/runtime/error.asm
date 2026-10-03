@@ -57,6 +57,7 @@ ERROR_TapeLoadingErr    EQU    26
 
 __ERR_STR: DEFB "Error ", 0
 
+#ifndef CPC_BAREMETAL
 #ifdef __CPC_PRINTER_ECHO__
 ; __ERR_PRN_ECHO -- sends A to the printer (MC_PRINT_CHAR &BD2B), through
 ; the gate. Retried a few times: the Firmware Guide says a busy printer
@@ -80,6 +81,7 @@ __EPE_DONE:
     ret
     ENDP
 #endif
+#endif
 
 ; Raises a runtime error: stores the code, prints "Error n" on a fresh
 ; line, waits for a keypress, then resets to BASIC's Ready prompt (END's
@@ -101,6 +103,46 @@ __EPE_DONE:
 ; inside KM_WAIT_KEY. Interrupts go off just before the reset, so our
 ; &0038 vector (isr.asm) is never used while the firmware rebuilds it.
 ; Registers clobbered: none (never returns).
+; __ERR_SCR -- A = character to the screen only; __ERR_OUT -- to the
+; screen and, under -D __CPC_PRINTER_ECHO__, the printer. Both preserve
+; BC, DE, HL (the callers keep the error number and digits there).
+; __ERR_RESET -- the machine reset after an error.
+#ifdef CPC_BAREMETAL
+; Bare-metal mode: no firmware. The screen part is added with the bare
+; text output (Phase 6 B2); the echo goes straight to the printer port.
+__ERR_SCR:
+    ret
+__ERR_OUT:
+#ifdef __CPC_PRINTER_ECHO__
+    push bc
+    push de
+    push hl
+    call __CPC_PRN_CHAR
+    pop  hl
+    pop  de
+    pop  bc
+#endif
+    ret
+__ERR_RESET:
+    jp   __CPC_RESET    ; bareboot.asm: lower ROM in, jump to 0
+#else
+; Firmware: TXT_OUTPUT (&BB5A, preserves every register) through the gate.
+__ERR_SCR:
+    call .core.__FW_CALL
+    defw $BB5A
+    ret
+__ERR_OUT:
+    call .core.__FW_CALL
+    defw $BB5A
+#ifdef __CPC_PRINTER_ECHO__
+    call __ERR_PRN_ECHO
+#endif
+    ret
+__ERR_RESET:
+    di
+    rst  0
+#endif
+
 __ERROR:
     PROC
 
@@ -113,14 +155,9 @@ __ERROR:
     ; 13, spelled out here since the error path doesn't use print.asm).
     ; Printer echo gets the LF only, not the CR (print.asm's decision).
     ld   a, 13
-    call .core.__FW_CALL
-    defw $BB5A
+    call __ERR_SCR
     ld   a, 10
-    call .core.__FW_CALL
-    defw $BB5A
-#ifdef __CPC_PRINTER_ECHO__
-    call __ERR_PRN_ECHO
-#endif
+    call __ERR_OUT
 
     ; "Error "
     ld   hl, __ERR_STR
@@ -129,11 +166,7 @@ __ERROR_MSG_LOOP:
     or   a
     jr   z, __ERROR_MSG_DONE
     inc  hl
-    call .core.__FW_CALL
-    defw $BB5A
-#ifdef __CPC_PRINTER_ECHO__
-    call __ERR_PRN_ECHO
-#endif
+    call __ERR_OUT
     jr   __ERROR_MSG_LOOP
 __ERROR_MSG_DONE:
 
@@ -143,14 +176,11 @@ __ERROR_MSG_DONE:
 #ifdef __CPC_PRINTER_ECHO__
     ; Echo mode: a failing test still has to reach END, so don't block
     ; on a keypress here (see the file header) -- straight to reset.
-    di
-    rst  0
+    jp   __ERR_RESET
 #else
     ; Flush stale keys, then wait for a real one (bootstrap.asm).
     call __CPC_WAIT_KEY
-
-    di
-    rst  0              ; reset to BASIC's Ready prompt
+    jp   __ERR_RESET    ; reset to BASIC's Ready prompt
 #endif
 
     ENDP
@@ -205,11 +235,7 @@ __PDA_DONE:
     ld   d, 1
     ld   a, c
     add  a, '0'
-    call .core.__FW_CALL
-    defw $BB5A
-#ifdef __CPC_PRINTER_ECHO__
-    call __ERR_PRN_ECHO
-#endif
+    call __ERR_OUT
 __PDA_SKIP:
     ld   a, e             ; remainder becomes the input for the next digit
     ret

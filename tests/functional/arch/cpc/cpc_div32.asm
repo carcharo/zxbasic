@@ -227,6 +227,7 @@ __MODI32:	; 32bits signed division modulus
 	; (digits are below uppercase letters in ASCII), which is a stronger
 	; guarantee than just renaming past today's one clash. Nothing else
 	; references the old CPC_INIT_SYSVARS name.
+#line 33 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/sysvars.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC system variables
@@ -454,7 +455,7 @@ __MODI32:	; 32bits signed division modulus
 	SCR_ROWS            EQU 25      ; rows visible (0-24, 0-based)
 	SCR_SIZE            EQU (SCR_ROWS << 8) + SCR_COLS
 	    pop namespace
-#line 30 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 35 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/fwcall.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC firmware call gate
@@ -481,6 +482,11 @@ __MODI32:	; 32bits signed division modulus
 	; Clobbers BC', DE', HL', AF' (never meaningful to compiled code across a
 	; call). Not re-entrant (the interrupt handler never calls it).
 ; Cost: about 220 T-states plus the firmware routine.
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware, so the gate is
+	; not defined at all. Anything that still calls the firmware fails to
+	; build with "undefined label __FW_CALL" -- that is how firmware-only
+	; features (LOAD/SAVE, firmware sound, direct firmware calls in asm) are
+	; refused in bare mode.
 	    push namespace core
 __FW_CALL:
 	    PROC
@@ -545,7 +551,8 @@ __FW_CALL_IX_TARGET:
 	    ret
 	    ENDP
 	    pop namespace
-#line 31 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 104 "src/lib/arch/cpc/runtime/fwcall.asm"
+#line 36 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/isr.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC interrupt front-end
@@ -580,6 +587,7 @@ __FW_CALL_IX_TARGET:
 	;
 ; Cost: about 250 T-states on top of the firmware's handler, 300 times
 	; a second. See cpcbuild docs/phase4d-design.md.
+#line 64 "src/lib/arch/cpc/runtime/isr.asm"
 	    push namespace core
 	; __CPC_ISR_INSTALL -- points the RAM vector at &0038 to __CPC_ISR,
 	; keeping the original jump target. Call with interrupts off (the
@@ -652,7 +660,8 @@ __CPC_ISR_DIRECT:
 __CPC_ISR_ORIG:
 	    jp   $FFFF              ; patched by __CPC_ISR_INSTALL
 	    pop namespace
-#line 32 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 143 "src/lib/arch/cpc/runtime/isr.asm"
+#line 37 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/colour.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC -- Spectrum colours to pens, and the per-mode screen
@@ -742,7 +751,7 @@ __INK_TO_PEN:
 	    pop  hl
 	    ret
 	    pop namespace
-#line 33 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 38 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    push namespace core
 	; CPC_INIT_00_BOOTSTRAP -- captures FW_BC, zero-fills the private
 	; runtime block ($9E00-$A1FF, .core.CPC_PRIV_BASE for
@@ -860,14 +869,15 @@ __CPC_WAIT_KEY:
 ; Firmware entries called: MC_PRINT_CHAR (&BD2B) in printer-echo builds;
 ; KM_READ_CHAR/KM_WAIT_KEY otherwise. Registers clobbered: none (never
 	; returns).
-#line 171 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 176 "src/lib/arch/cpc/runtime/bootstrap.asm"
 __CPC_END:
-#line 198 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 203 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    call __CPC_WAIT_KEY
 	    di
 	    rst  0
-#line 202 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 207 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    pop namespace
+#line 210 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 41 "tests/functional/arch/cpc/cpc_div32.bas"
 #line 1 "src/lib/arch/cpc/runtime/copy_attr.asm"
 	; Copies the permanent attribute (ATTR_P/MASK_P/FLAGS2/P_FLAG) into the
@@ -1171,7 +1181,8 @@ __SAVE_S_POSN:
 	ERROR_BreakIntoProgram  EQU    20
 	ERROR_TapeLoadingErr    EQU    26
 __ERR_STR: DEFB "Error ", 0
-#line 83 "src/lib/arch/cpc/runtime/error.asm"
+#line 84 "src/lib/arch/cpc/runtime/error.asm"
+#line 85 "src/lib/arch/cpc/runtime/error.asm"
 ; Raises a runtime error: stores the code, prints "Error n" on a fresh
 	; line, waits for a keypress, then resets to BASIC's Ready prompt (END's
 	; own reset, generic.py's _end -- see cpc-port-notes.md Sec6.5).
@@ -1192,6 +1203,25 @@ __ERR_STR: DEFB "Error ", 0
 	; inside KM_WAIT_KEY. Interrupts go off just before the reset, so our
 	; &0038 vector (isr.asm) is never used while the firmware rebuilds it.
 ; Registers clobbered: none (never returns).
+	; __ERR_SCR -- A = character to the screen only; __ERR_OUT -- to the
+	; screen and, under -D __CPC_PRINTER_ECHO__, the printer. Both preserve
+	; BC, DE, HL (the callers keep the error number and digits there).
+	; __ERR_RESET -- the machine reset after an error.
+#line 129 "src/lib/arch/cpc/runtime/error.asm"
+; Firmware: TXT_OUTPUT (&BB5A, preserves every register) through the gate.
+__ERR_SCR:
+	    call .core.__FW_CALL
+	    defw $BB5A
+	    ret
+__ERR_OUT:
+	    call .core.__FW_CALL
+	    defw $BB5A
+#line 140 "src/lib/arch/cpc/runtime/error.asm"
+	    ret
+__ERR_RESET:
+	    di
+	    rst  0
+#line 145 "src/lib/arch/cpc/runtime/error.asm"
 __ERROR:
 	    PROC
 	    ld   (ERR_NR), a
@@ -1202,12 +1232,9 @@ __ERROR:
 	    ; 13, spelled out here since the error path doesn't use print.asm).
 	    ; Printer echo gets the LF only, not the CR (print.asm's decision).
 	    ld   a, 13
-	    call .core.__FW_CALL
-	    defw $BB5A
+	    call __ERR_SCR
 	    ld   a, 10
-	    call .core.__FW_CALL
-	    defw $BB5A
-#line 124 "src/lib/arch/cpc/runtime/error.asm"
+	    call __ERR_OUT
 	    ; "Error "
 	    ld   hl, __ERR_STR
 __ERROR_MSG_LOOP:
@@ -1215,19 +1242,16 @@ __ERROR_MSG_LOOP:
 	    or   a
 	    jr   z, __ERROR_MSG_DONE
 	    inc  hl
-	    call .core.__FW_CALL
-	    defw $BB5A
-#line 137 "src/lib/arch/cpc/runtime/error.asm"
+	    call __ERR_OUT
 	    jr   __ERROR_MSG_LOOP
 __ERROR_MSG_DONE:
 	    ld   a, c
 	    call __PRINT_DECIMAL_A
-#line 149 "src/lib/arch/cpc/runtime/error.asm"
+#line 181 "src/lib/arch/cpc/runtime/error.asm"
 	    ; Flush stale keys, then wait for a real one (bootstrap.asm).
 	    call __CPC_WAIT_KEY
-	    di
-	    rst  0              ; reset to BASIC's Ready prompt
-#line 155 "src/lib/arch/cpc/runtime/error.asm"
+	    jp   __ERR_RESET    ; reset to BASIC's Ready prompt
+#line 185 "src/lib/arch/cpc/runtime/error.asm"
 	    ENDP
 	; Sets the error system variable, but keeps running.
 	; Usually this instruction if followed by the END intermediate instruction.
@@ -1273,9 +1297,7 @@ __PDA_DONE:
 	    ld   d, 1
 	    ld   a, c
 	    add  a, '0'
-	    call .core.__FW_CALL
-	    defw $BB5A
-#line 213 "src/lib/arch/cpc/runtime/error.asm"
+	    call __ERR_OUT
 __PDA_SKIP:
 	    ld   a, e             ; remainder becomes the input for the next digit
 	    ret

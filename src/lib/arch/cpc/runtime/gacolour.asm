@@ -72,6 +72,7 @@ __CPC_SET_INK:
     cp   27
     ret  nc
     ld   a, b
+#ifndef CPC_BAREMETAL
     ld   b, c
     push af
     push bc
@@ -79,7 +80,8 @@ __CPC_SET_INK:
     defw $BC32
     pop  bc
     pop  af
-    jp   __CPC_GA_SET
+#endif
+    jp   __CPC_GA_SET           ; bare-metal mode: the Gate Array only
 
 ; __CPC_SET_BORDER -- A = firmware colour 0-26: sets the border in the
 ; firmware and on the Gate Array. Colours above 26 are ignored.
@@ -90,11 +92,13 @@ __CPC_SET_BORDER:
     ret  nc
     ld   b, a
     ld   c, a
+#ifndef CPC_BAREMETAL
     push bc
     call .core.__FW_CALL
     defw $BC38
     pop  bc
+#endif
     ld   a, 16
-    jp   __CPC_GA_SET
+    jp   __CPC_GA_SET           ; bare-metal mode: the Gate Array only
 
     pop namespace

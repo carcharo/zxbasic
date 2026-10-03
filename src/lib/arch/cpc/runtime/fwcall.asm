@@ -26,6 +26,13 @@
 
 #include once <sysvars.asm>
 
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware, so the gate is
+; not defined at all. Anything that still calls the firmware fails to
+; build with "undefined label __FW_CALL" -- that is how firmware-only
+; features (LOAD/SAVE, firmware sound, direct firmware calls in asm) are
+; refused in bare mode.
+#ifndef CPC_BAREMETAL
+
     push namespace core
 
 __FW_CALL:
@@ -93,3 +100,4 @@ __FW_CALL_IX_TARGET:
     ENDP
 
     pop namespace
+#endif

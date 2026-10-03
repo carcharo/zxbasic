@@ -363,6 +363,7 @@ __CPC_AY_READ_DI:
 	; (digits are below uppercase letters in ASCII), which is a stronger
 	; guarantee than just renaming past today's one clash. Nothing else
 	; references the old CPC_INIT_SYSVARS name.
+#line 33 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/sysvars.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC system variables
@@ -590,7 +591,7 @@ __CPC_AY_READ_DI:
 	SCR_ROWS            EQU 25      ; rows visible (0-24, 0-based)
 	SCR_SIZE            EQU (SCR_ROWS << 8) + SCR_COLS
 	    pop namespace
-#line 30 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 35 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/fwcall.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC firmware call gate
@@ -617,6 +618,11 @@ __CPC_AY_READ_DI:
 	; Clobbers BC', DE', HL', AF' (never meaningful to compiled code across a
 	; call). Not re-entrant (the interrupt handler never calls it).
 ; Cost: about 220 T-states plus the firmware routine.
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware, so the gate is
+	; not defined at all. Anything that still calls the firmware fails to
+	; build with "undefined label __FW_CALL" -- that is how firmware-only
+	; features (LOAD/SAVE, firmware sound, direct firmware calls in asm) are
+	; refused in bare mode.
 	    push namespace core
 __FW_CALL:
 	    PROC
@@ -681,7 +687,8 @@ __FW_CALL_IX_TARGET:
 	    ret
 	    ENDP
 	    pop namespace
-#line 31 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 104 "src/lib/arch/cpc/runtime/fwcall.asm"
+#line 36 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/isr.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC interrupt front-end
@@ -716,6 +723,7 @@ __FW_CALL_IX_TARGET:
 	;
 ; Cost: about 250 T-states on top of the firmware's handler, 300 times
 	; a second. See cpcbuild docs/phase4d-design.md.
+#line 64 "src/lib/arch/cpc/runtime/isr.asm"
 	    push namespace core
 	; __CPC_ISR_INSTALL -- points the RAM vector at &0038 to __CPC_ISR,
 	; keeping the original jump target. Call with interrupts off (the
@@ -788,7 +796,8 @@ __CPC_ISR_DIRECT:
 __CPC_ISR_ORIG:
 	    jp   $FFFF              ; patched by __CPC_ISR_INSTALL
 	    pop namespace
-#line 32 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 143 "src/lib/arch/cpc/runtime/isr.asm"
+#line 37 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/colour.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC -- Spectrum colours to pens, and the per-mode screen
@@ -878,7 +887,7 @@ __INK_TO_PEN:
 	    pop  hl
 	    ret
 	    pop namespace
-#line 33 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 38 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    push namespace core
 	; CPC_INIT_00_BOOTSTRAP -- captures FW_BC, zero-fills the private
 	; runtime block ($9E00-$A1FF, .core.CPC_PRIV_BASE for
@@ -996,14 +1005,15 @@ __CPC_WAIT_KEY:
 ; Firmware entries called: MC_PRINT_CHAR (&BD2B) in printer-echo builds;
 ; KM_READ_CHAR/KM_WAIT_KEY otherwise. Registers clobbered: none (never
 	; returns).
-#line 171 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 176 "src/lib/arch/cpc/runtime/bootstrap.asm"
 __CPC_END:
-#line 198 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 203 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    call __CPC_WAIT_KEY
 	    di
 	    rst  0
-#line 202 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 207 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    pop namespace
+#line 210 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 229 "src/lib/arch/cpc/stdlib/cpc.bas"
 #line 1 "src/lib/arch/cpc/runtime/cls.asm"
 	;; Clears the text screen and homes the cursor, via the firmware.
@@ -1255,7 +1265,8 @@ __CPC_SET_INK:
 	    defw $BC32
 	    pop  bc
 	    pop  af
-	    jp   __CPC_GA_SET
+#line 84 "src/lib/arch/cpc/runtime/gacolour.asm"
+    jp   __CPC_GA_SET           ; bare-metal mode: the Gate Array only
 ; __CPC_SET_BORDER -- A = firmware colour 0-26: sets the border in the
 	; firmware and on the Gate Array. Colours above 26 are ignored.
 ; Firmware entry called: SCR_SET_BORDER (&BC38, B and C = colour).
@@ -1269,8 +1280,9 @@ __CPC_SET_BORDER:
 	    call .core.__FW_CALL
 	    defw $BC38
 	    pop  bc
+#line 101 "src/lib/arch/cpc/runtime/gacolour.asm"
 	    ld   a, 16
-	    jp   __CPC_GA_SET
+    jp   __CPC_GA_SET           ; bare-metal mode: the Gate Array only
 	    pop namespace
 #line 234 "src/lib/arch/cpc/stdlib/cpc.bas"
 	END

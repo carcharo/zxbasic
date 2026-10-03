@@ -34,6 +34,34 @@
 
 #include once <sysvars.asm>
 
+#ifdef CPC_BAREMETAL
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware to chain to.
+; Every interrupt goes to the frame detector (framecore.asm), which counts
+; frames and runs the frame hook; the Gate Array's interrupt is
+; acknowledged by the Z80's IM 1 acknowledge cycle itself.
+#include once <framecore.asm>
+
+    push namespace core
+
+; __CPC_ISR_INSTALL -- points the RAM vector at &0038 to __CPC_ISR. Call
+; with interrupts off and the lower ROM paged out (the bare boot does).
+; Registers clobbered: AF, HL.
+__CPC_ISR_INSTALL:
+    ld   a, $C3             ; JP nn
+    ld   ($0038), a
+    ld   hl, __CPC_ISR
+    ld   ($0039), hl
+    ret
+
+; __CPC_ISR -- the IM 1 handler (entered with interrupts off).
+; Registers clobbered: none.
+__CPC_ISR:
+    push af
+    jp   __CPC_GM_ISR       ; pops AF, EI, RET
+
+    pop namespace
+#else
+
     push namespace core
 
 ; __CPC_ISR_INSTALL -- points the RAM vector at &0038 to __CPC_ISR,
@@ -111,3 +139,4 @@ __CPC_ISR_ORIG:
     jp   $FFFF              ; patched by __CPC_ISR_INSTALL
 
     pop namespace
+#endif

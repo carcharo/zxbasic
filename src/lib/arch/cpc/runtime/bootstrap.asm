@@ -26,6 +26,11 @@
 ; guarantee than just renaming past today's one clash. Nothing else
 ; references the old CPC_INIT_SYSVARS name.
 
+#ifdef CPC_BAREMETAL
+; Bare-metal mode: the firmware is never called; see bareboot.asm.
+#include once <bareboot.asm>
+#else
+
 #include once <sysvars.asm>
 #include once <fwcall.asm>
 #include once <isr.asm>
@@ -201,3 +206,4 @@ __CE_DONE:
 #endif
 
     pop namespace
+#endif

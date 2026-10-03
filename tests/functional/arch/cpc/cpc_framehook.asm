@@ -105,6 +105,7 @@ _GameMode__leave:
 	; (digits are below uppercase letters in ASCII), which is a stronger
 	; guarantee than just renaming past today's one clash. Nothing else
 	; references the old CPC_INIT_SYSVARS name.
+#line 33 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/sysvars.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC system variables
@@ -332,7 +333,7 @@ _GameMode__leave:
 	SCR_ROWS            EQU 25      ; rows visible (0-24, 0-based)
 	SCR_SIZE            EQU (SCR_ROWS << 8) + SCR_COLS
 	    pop namespace
-#line 30 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 35 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/fwcall.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC firmware call gate
@@ -359,6 +360,11 @@ _GameMode__leave:
 	; Clobbers BC', DE', HL', AF' (never meaningful to compiled code across a
 	; call). Not re-entrant (the interrupt handler never calls it).
 ; Cost: about 220 T-states plus the firmware routine.
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware, so the gate is
+	; not defined at all. Anything that still calls the firmware fails to
+	; build with "undefined label __FW_CALL" -- that is how firmware-only
+	; features (LOAD/SAVE, firmware sound, direct firmware calls in asm) are
+	; refused in bare mode.
 	    push namespace core
 __FW_CALL:
 	    PROC
@@ -423,7 +429,8 @@ __FW_CALL_IX_TARGET:
 	    ret
 	    ENDP
 	    pop namespace
-#line 31 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 104 "src/lib/arch/cpc/runtime/fwcall.asm"
+#line 36 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/isr.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC interrupt front-end
@@ -458,6 +465,7 @@ __FW_CALL_IX_TARGET:
 	;
 ; Cost: about 250 T-states on top of the firmware's handler, 300 times
 	; a second. See cpcbuild docs/phase4d-design.md.
+#line 64 "src/lib/arch/cpc/runtime/isr.asm"
 	    push namespace core
 	; __CPC_ISR_INSTALL -- points the RAM vector at &0038 to __CPC_ISR,
 	; keeping the original jump target. Call with interrupts off (the
@@ -530,7 +538,8 @@ __CPC_ISR_DIRECT:
 __CPC_ISR_ORIG:
 	    jp   $FFFF              ; patched by __CPC_ISR_INSTALL
 	    pop namespace
-#line 32 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 143 "src/lib/arch/cpc/runtime/isr.asm"
+#line 37 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 1 "src/lib/arch/cpc/runtime/colour.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC -- Spectrum colours to pens, and the per-mode screen
@@ -620,7 +629,7 @@ __INK_TO_PEN:
 	    pop  hl
 	    ret
 	    pop namespace
-#line 33 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 38 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    push namespace core
 	; CPC_INIT_00_BOOTSTRAP -- captures FW_BC, zero-fills the private
 	; runtime block ($9E00-$A1FF, .core.CPC_PRIV_BASE for
@@ -738,14 +747,15 @@ __CPC_WAIT_KEY:
 ; Firmware entries called: MC_PRINT_CHAR (&BD2B) in printer-echo builds;
 ; KM_READ_CHAR/KM_WAIT_KEY otherwise. Registers clobbered: none (never
 	; returns).
-#line 171 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 176 "src/lib/arch/cpc/runtime/bootstrap.asm"
 __CPC_END:
-#line 198 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 203 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    call __CPC_WAIT_KEY
 	    di
 	    rst  0
-#line 202 "src/lib/arch/cpc/runtime/bootstrap.asm"
+#line 207 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    pop namespace
+#line 210 "src/lib/arch/cpc/runtime/bootstrap.asm"
 #line 75 "src/lib/arch/cpc/stdlib/framehook.bas"
 #line 1 "src/lib/arch/cpc/runtime/framehook.asm"
 	; -----------------------------------------------------------------------
@@ -778,26 +788,22 @@ __CPC_END:
 	; The frame routine (FH_ADDR) runs with interrupts off and every register
 	; saved; it must not call the firmware (the gate turns interrupts on),
 	; PRINT, or use floats or strings.
+	;
+	; The frame work itself (__CPC_FH_RUN, __CPC_GM_ISR) is in framecore.asm.
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware event; isr.asm
+	; counts frames and runs the hook on every frame, so this file adds
+; nothing (and GameMode() has no effect: bare mode is always "game mode").
+#line 1 "src/lib/arch/cpc/runtime/framecore.asm"
+	; -----------------------------------------------------------------------
+; Amstrad CPC frame core: counts frames and runs the frame hook
+	;
+	; __CPC_FH_RUN is one frame's work (count it, call FH_ADDR); __CPC_GM_ISR
+	; decides which interrupt is the frame one (VSYNC on PPI port B, or the
+	; 6th interrupt since the last frame when a DI section hid the pulse).
+; Used by framehook.asm (firmware mode: game mode and the frame event) and
+	; by isr.asm in bare-metal mode (-D CPC_BAREMETAL), where every interrupt
+	; goes through __CPC_GM_ISR and frames are always counted.
 	    push namespace core
-	; CPC_INIT_FRAMEHOOK -- registers the frame-flyback event.
-; Firmware entry called: KL_NEW_FRAME_FLY (&BCD7: HL = event block,
-	; B = event class, C = ROM select, DE = routine), via the gate.
-; Registers clobbered: AF, BC, DE, HL (and the gate's).
-CPC_INIT_FRAMEHOOK:
-	    ld   hl, FH_BLOCK
-	    ld   de, __CPC_FH_EVENT
-    ld   bc, $80FF          ; async, far address; ROM select &FF: both off
-	    call __FW_CALL
-	    defw $BCD7
-	    ret
-	; __CPC_FH_EVENT -- the firmware event routine (entered with interrupts
-	; on, both ROMs off).
-; Registers clobbered: none (see __CPC_FH_RUN).
-__CPC_FH_EVENT:
-	    di
-	    call __CPC_FH_RUN
-	    ei
-	    ret
 ; __CPC_FH_RUN -- one frame: restarts GM_COUNT, counts the frame (32-bit
 	; FH_FRAMES) and calls the routine at FH_ADDR if it isn't 0. Call with
 	; interrupts off.
@@ -881,5 +887,28 @@ __GM_DONE:
 	    ret
 	    ENDP
 	    pop namespace
+#line 39 "src/lib/arch/cpc/runtime/framehook.asm"
+	    push namespace core
+	; CPC_INIT_FRAMEHOOK -- registers the frame-flyback event.
+; Firmware entry called: KL_NEW_FRAME_FLY (&BCD7: HL = event block,
+	; B = event class, C = ROM select, DE = routine), via the gate.
+; Registers clobbered: AF, BC, DE, HL (and the gate's).
+CPC_INIT_FRAMEHOOK:
+	    ld   hl, FH_BLOCK
+	    ld   de, __CPC_FH_EVENT
+    ld   bc, $80FF          ; async, far address; ROM select &FF: both off
+	    call __FW_CALL
+	    defw $BCD7
+	    ret
+	; __CPC_FH_EVENT -- the firmware event routine (entered with interrupts
+	; on, both ROMs off).
+; Registers clobbered: none (see __CPC_FH_RUN).
+__CPC_FH_EVENT:
+	    di
+	    call __CPC_FH_RUN
+	    ei
+	    ret
+	    pop namespace
+#line 70 "src/lib/arch/cpc/runtime/framehook.asm"
 #line 76 "src/lib/arch/cpc/stdlib/framehook.bas"
 	END
