@@ -136,8 +136,17 @@
 ;                                    scan, rows 0-9 (bit = 0: pressed)
 ;   $D1     16    SND_ENV            fwsound.asm: volume envelope data
 ;                                    buffer for SOUND_AMPL_ENVELOPE
+;   $E1     2     GM_VEC             isr.asm: game-mode handler address
+;                                    (0 = normal mode; framehook.asm)
+;   $E3     2     FH_ADDR            framehook.asm: frame hook routine
+;                                    (0 = none)
+;   $E5     4     FH_FRAMES          framehook.asm: frames counted
+;   $E9     1     GM_COUNT           framehook.asm: interrupts since the
+;                                    last frame (game mode)
+;   $EA     9     FH_BLOCK           framehook.asm: KL_NEW_FRAME_FLY event
+;                                    block (must be in central RAM)
 ;   ------  ----
-;   $E1     (225 bytes used)
+;   $F3     (243 bytes used)
 ;
 ; --- ATTR_P / ATTR_T bit layout (one byte, same shape as zx48k's) ------
 ;
@@ -150,7 +159,7 @@
 ;   6     BRIGHT flag (bright.asm) -- accepted, ignored (notes.md Q5)
 ;   7     FLASH flag (flash.asm) -- accepted, ignored (notes.md Q5)
 ;
-; $E1 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
+; $F3 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
 ; below lets it be compared against .core.CPC_PRIV_SIZE by eye whenever
 ; this table grows.
 
@@ -221,8 +230,13 @@ CB_TILESET          EQU SYSVAR_BASE + $C5   ; DW -- current tileset address
 CB_KEYS             EQU SYSVAR_BASE + $C7   ; 10B -- keyboard matrix scan
 
 SND_ENV             EQU SYSVAR_BASE + $D1   ; 16B -- envelope data buffer (fwsound.asm)
+GM_VEC              EQU SYSVAR_BASE + $E1   ; DW -- game-mode handler (0 = normal; isr.asm)
+FH_ADDR             EQU SYSVAR_BASE + $E3   ; DW -- frame hook routine (0 = none)
+FH_FRAMES           EQU SYSVAR_BASE + $E5   ; 4B -- frames counted (framehook.asm)
+GM_COUNT            EQU SYSVAR_BASE + $E9   ; DB -- interrupts since last frame (game mode)
+FH_BLOCK            EQU SYSVAR_BASE + $EA   ; 9B -- frame-flyback event block (framehook.asm)
 
-CPC_SYSVARS_USED    EQU $E1                 ; bytes used above; compare by eye against
+CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
                                              ; .core.CPC_PRIV_SIZE when this table grows
 
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------

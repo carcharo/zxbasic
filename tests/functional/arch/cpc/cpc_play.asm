@@ -326,13 +326,13 @@ __Play_EnvelopeShapes.__DATA__:
 .core.__END_PROGRAM:
 	jp .core.__CPC_END
 __Play_AyWrite:
-#line 244 "src/lib/arch/cpc/stdlib/play.bas"
+#line 242 "src/lib/arch/cpc/stdlib/play.bas"
 		pop hl
 		pop bc
 		ld c, b
 		call .core.__CPC_AY_WRITE
 		jp (hl)
-#line 251 "src/lib/arch/cpc/stdlib/play.bas"
+#line 249 "src/lib/arch/cpc/stdlib/play.bas"
 __Play_AyWrite__leave:
 	ret
 _Play:
@@ -361,13 +361,13 @@ _Play:
 	call .core.__ARRAY
 	ld (ix-13), l
 	ld (ix-12), h
-#line 494 "src/lib/arch/cpc/stdlib/play.bas"
+#line 492 "src/lib/arch/cpc/stdlib/play.bas"
 		call .core.__FW_CALL
 		defw $BCA7
+#line 496 "src/lib/arch/cpc/stdlib/play.bas"
 #line 498 "src/lib/arch/cpc/stdlib/play.bas"
-#line 500 "src/lib/arch/cpc/stdlib/play.bas"
 		di
-#line 503 "src/lib/arch/cpc/stdlib/play.bas"
+#line 501 "src/lib/arch/cpc/stdlib/play.bas"
 	ld l, (ix-13)
 	ld h, (ix-12)
 	ld (__Play_ContextPtr), hl
@@ -1299,9 +1299,9 @@ _Play:
 	sub 3
 	jp nz, .LABEL.__LABEL7
 .LABEL.__LABEL8:
-#line 767 "src/lib/arch/cpc/stdlib/play.bas"
+#line 765 "src/lib/arch/cpc/stdlib/play.bas"
 		ei
-#line 770 "src/lib/arch/cpc/stdlib/play.bas"
+#line 768 "src/lib/arch/cpc/stdlib/play.bas"
 _Play__leave:
 	ex af, af'
 	exx
@@ -1489,7 +1489,7 @@ _Play.UpdateMicroticksPerTick__leave:
 	pop ix
 	ret
 _Play.Wait:
-#line 435 "src/lib/arch/cpc/stdlib/play.bas"
+#line 433 "src/lib/arch/cpc/stdlib/play.bas"
 		proc
 		local loop
 		ld bc, 1
@@ -1498,7 +1498,7 @@ loop:
 		sbc hl, bc
 		jr nz, loop
 		endp
-#line 447 "src/lib/arch/cpc/stdlib/play.bas"
+#line 445 "src/lib/arch/cpc/stdlib/play.bas"
 _Play.Wait__leave:
 	ret
 _Play.SetChipTonePitchDivider:
@@ -1825,8 +1825,17 @@ _Play.SetChipMixer__leave:
 ;                                    scan, rows 0-9 (bit = 0: pressed)
 ;   $D1     16    SND_ENV            fwsound.asm: volume envelope data
 	;                                    buffer for SOUND_AMPL_ENVELOPE
+;   $E1     2     GM_VEC             isr.asm: game-mode handler address
+	;                                    (0 = normal mode; framehook.asm)
+;   $E3     2     FH_ADDR            framehook.asm: frame hook routine
+	;                                    (0 = none)
+;   $E5     4     FH_FRAMES          framehook.asm: frames counted
+;   $E9     1     GM_COUNT           framehook.asm: interrupts since the
+	;                                    last frame (game mode)
+;   $EA     9     FH_BLOCK           framehook.asm: KL_NEW_FRAME_FLY event
+	;                                    block (must be in central RAM)
 	;   ------  ----
-	;   $E1     (225 bytes used)
+	;   $F3     (243 bytes used)
 	;
 	; --- ATTR_P / ATTR_T bit layout (one byte, same shape as zx48k's) ------
 	;
@@ -1839,7 +1848,7 @@ _Play.SetChipMixer__leave:
 	;   6     BRIGHT flag (bright.asm) -- accepted, ignored (notes.md Q5)
 	;   7     FLASH flag (flash.asm) -- accepted, ignored (notes.md Q5)
 	;
-	; $E1 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
+	; $F3 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
 	; below lets it be compared against .core.CPC_PRIV_SIZE by eye whenever
 	; this table grows.
 	    push namespace core
@@ -1897,7 +1906,12 @@ _Play.SetChipMixer__leave:
 	CB_TILESET          EQU SYSVAR_BASE + $C5   ; DW -- current tileset address
 	CB_KEYS             EQU SYSVAR_BASE + $C7   ; 10B -- keyboard matrix scan
 	SND_ENV             EQU SYSVAR_BASE + $D1   ; 16B -- envelope data buffer (fwsound.asm)
-	CPC_SYSVARS_USED    EQU $E1                 ; bytes used above; compare by eye against
+	GM_VEC              EQU SYSVAR_BASE + $E1   ; DW -- game-mode handler (0 = normal; isr.asm)
+	FH_ADDR             EQU SYSVAR_BASE + $E3   ; DW -- frame hook routine (0 = none)
+	FH_FRAMES           EQU SYSVAR_BASE + $E5   ; 4B -- frames counted (framehook.asm)
+	GM_COUNT            EQU SYSVAR_BASE + $E9   ; DB -- interrupts since last frame (game mode)
+	FH_BLOCK            EQU SYSVAR_BASE + $EA   ; 9B -- frame-flyback event block (framehook.asm)
+	CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
 ; The column count follows the screen mode at run time (TXT_COLS above:
@@ -2092,6 +2106,11 @@ __FW_CALL_IX_TARGET:
 	; The original handler (RAM &B941 on the 6128, &B939 on the 464; the
 	; same code in both ROMs) is read from the vector at boot.
 	;
+; Game mode (framehook.asm, opt-in): when GM_VEC is non-zero, interrupts
+	; outside firmware calls go to the handler it points to instead of the
+	; firmware, which then only runs during firmware calls. GM_VEC is zero
+	; (normal mode) unless a program switches game mode on.
+	;
 ; Cost: about 250 T-states on top of the firmware's handler, 300 times
 	; a second. See cpcbuild docs/phase4d-design.md.
 	    push namespace core
@@ -2114,7 +2133,10 @@ __CPC_ISR:
 	    ld   a, (IN_FW)
 	    or   a
 	    jr   nz, __CPC_ISR_DIRECT
-	    inc  a
+	    ld   a, (GM_VEC + 1)
+	    or   a
+    jr   nz, __CPC_ISR_GAME ; game mode (framehook.asm): skip the firmware
+	    inc  a                  ; A = 1
 	    ld   (IN_FW), a         ; an interrupt during the chain goes direct
 	    push bc
 	    push de
@@ -2150,6 +2172,13 @@ __CPC_ISR:
 	    ld   (IN_FW), a
 	    pop  af
 	    ei
+	    ret
+; Game mode: jump to the handler in GM_VEC with HL as it was and the
+	; program's AF still on the stack (the handler ends "pop af; ei; ret").
+__CPC_ISR_GAME:
+	    push hl
+	    ld   hl, (GM_VEC)
+	    ex   (sp), hl
 	    ret
 __CPC_ISR_DIRECT:
 	    pop  af
@@ -4535,7 +4564,7 @@ __DIVBYZERO:
 	    ret
 	    ENDP
 	    pop namespace
-#line 606 "src/lib/arch/cpc/stdlib/play.bas"
+#line 604 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/arith/mul16.asm"
 	    push namespace core
 __MUL16:	; Mutiplies HL with the last value stored into de stack
@@ -4562,7 +4591,7 @@ __MUL16NOADD:
 	    ret	; Result in hl (16 lower bits)
 	    ENDP
 	    pop namespace
-#line 607 "src/lib/arch/cpc/stdlib/play.bas"
+#line 605 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/arith/mul8.asm"
 	    push namespace core
 __MUL8:		; Performs 8bit x 8bit multiplication
@@ -4609,7 +4638,7 @@ __MUL8B:
 	    ret		; result = HL
 	    ENDP
 	    pop namespace
-#line 608 "src/lib/arch/cpc/stdlib/play.bas"
+#line 606 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/cpc/runtime/array/array.asm"
 ; vim: ts=4:et:sw=4:
 	; Copyleft (K) by Jose M. Rodriguez de la Rosa
@@ -4749,7 +4778,7 @@ ARRAY_SIZE_LOOP:
 	    ret
 	    ENDP
 	    pop namespace
-#line 609 "src/lib/arch/cpc/stdlib/play.bas"
+#line 607 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/array/arrayalloc.asm"
 #line 1 "src/lib/arch/zx48k/runtime/mem/calloc.asm"
 ; vim: ts=4:et:sw=4:
@@ -5127,7 +5156,7 @@ __ALLOC_INITIALIZED_LOCAL_ARRAY:
 	    ret
 #line 142 "src/lib/arch/zx48k/runtime/array/arrayalloc.asm"
 	    pop namespace
-#line 610 "src/lib/arch/cpc/stdlib/play.bas"
+#line 608 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/cpc/runtime/ay.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC AY-3-8912 register access
@@ -5250,7 +5279,7 @@ __CPC_AY_READ_DI:
 	    ei
 	    ret
 	    pop namespace
-#line 611 "src/lib/arch/cpc/stdlib/play.bas"
+#line 609 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/bitwise/band16.asm"
 ; vim:ts=4:et:
 	; FASTCALL bitwise and16 version.
@@ -5269,7 +5298,7 @@ __BAND16:
 	    ld l, a
 	    ret
 	    pop namespace
-#line 612 "src/lib/arch/cpc/stdlib/play.bas"
+#line 610 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/bitwise/bnot16.asm"
 ; vim:ts=4:et:
 	; FASTCALL bitwise or 16 version.
@@ -5288,7 +5317,7 @@ __BNOT16:
 	    ld l, a
 	    ret
 	    pop namespace
-#line 613 "src/lib/arch/cpc/stdlib/play.bas"
+#line 611 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/cmp/eq16.asm"
 	    push namespace core
 __EQ16:	; Test if 16bit values HL == DE
@@ -5299,7 +5328,7 @@ __EQ16:	; Test if 16bit values HL == DE
 	    inc a
 	    ret
 	    pop namespace
-#line 615 "src/lib/arch/cpc/stdlib/play.bas"
+#line 613 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/ftou32reg.asm"
 #line 1 "src/lib/arch/zx48k/runtime/neg32.asm"
 	    push namespace core
@@ -5398,7 +5427,7 @@ __FTOU8:	; Converts float in C ED LH to Unsigned byte in A
 	    ld a, l
 	    ret
 	    pop namespace
-#line 616 "src/lib/arch/cpc/stdlib/play.bas"
+#line 614 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/loadstr.asm"
 	; Loads a string (ptr) from HL
 	; and duplicates it on dynamic memory again
@@ -5436,7 +5465,7 @@ __LOADSTR:		; __FASTCALL__ entry
 	    pop hl	; Recovers destiny in hl as result
 	    ret
 	    pop namespace
-#line 618 "src/lib/arch/cpc/stdlib/play.bas"
+#line 616 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/mem/free.asm"
 ; vim: ts=4:et:sw=4:
 	; Copyleft (K) by Jose M. Rodriguez de la Rosa
@@ -5595,7 +5624,7 @@ __MEM_BLOCK_JOIN:  ; Joins current block (pointed by HL) with next one (pointed 
 	    ret
 	    ENDP
 	    pop namespace
-#line 619 "src/lib/arch/cpc/stdlib/play.bas"
+#line 617 "src/lib/arch/cpc/stdlib/play.bas"
 #line 1 "src/lib/arch/zx48k/runtime/u32tofreg.asm"
 	    push namespace core
 __I8TOFREG:
@@ -5666,7 +5695,7 @@ __U32TOFREG_END:
 	    ret
 	    ENDP
 	    pop namespace
-#line 620 "src/lib/arch/cpc/stdlib/play.bas"
+#line 618 "src/lib/arch/cpc/stdlib/play.bas"
 .LABEL.__LABEL88:
 	DEFB 00h
 	DEFB 00h

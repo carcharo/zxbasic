@@ -24,6 +24,11 @@
 ; The original handler (RAM &B941 on the 6128, &B939 on the 464; the
 ; same code in both ROMs) is read from the vector at boot.
 ;
+; Game mode (framehook.asm, opt-in): when GM_VEC is non-zero, interrupts
+; outside firmware calls go to the handler it points to instead of the
+; firmware, which then only runs during firmware calls. GM_VEC is zero
+; (normal mode) unless a program switches game mode on.
+;
 ; Cost: about 250 T-states on top of the firmware's handler, 300 times
 ; a second. See cpcbuild docs/phase4d-design.md.
 
@@ -51,7 +56,10 @@ __CPC_ISR:
     ld   a, (IN_FW)
     or   a
     jr   nz, __CPC_ISR_DIRECT
-    inc  a
+    ld   a, (GM_VEC + 1)
+    or   a
+    jr   nz, __CPC_ISR_GAME ; game mode (framehook.asm): skip the firmware
+    inc  a                  ; A = 1
     ld   (IN_FW), a         ; an interrupt during the chain goes direct
     push bc
     push de
@@ -87,6 +95,14 @@ __CPC_ISR:
     ld   (IN_FW), a
     pop  af
     ei
+    ret
+
+; Game mode: jump to the handler in GM_VEC with HL as it was and the
+; program's AF still on the stack (the handler ends "pop af; ei; ret").
+__CPC_ISR_GAME:
+    push hl
+    ld   hl, (GM_VEC)
+    ex   (sp), hl
     ret
 
 __CPC_ISR_DIRECT:

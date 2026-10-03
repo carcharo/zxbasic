@@ -230,8 +230,17 @@ _s:
 ;                                    scan, rows 0-9 (bit = 0: pressed)
 ;   $D1     16    SND_ENV            fwsound.asm: volume envelope data
 	;                                    buffer for SOUND_AMPL_ENVELOPE
+;   $E1     2     GM_VEC             isr.asm: game-mode handler address
+	;                                    (0 = normal mode; framehook.asm)
+;   $E3     2     FH_ADDR            framehook.asm: frame hook routine
+	;                                    (0 = none)
+;   $E5     4     FH_FRAMES          framehook.asm: frames counted
+;   $E9     1     GM_COUNT           framehook.asm: interrupts since the
+	;                                    last frame (game mode)
+;   $EA     9     FH_BLOCK           framehook.asm: KL_NEW_FRAME_FLY event
+	;                                    block (must be in central RAM)
 	;   ------  ----
-	;   $E1     (225 bytes used)
+	;   $F3     (243 bytes used)
 	;
 	; --- ATTR_P / ATTR_T bit layout (one byte, same shape as zx48k's) ------
 	;
@@ -244,7 +253,7 @@ _s:
 	;   6     BRIGHT flag (bright.asm) -- accepted, ignored (notes.md Q5)
 	;   7     FLASH flag (flash.asm) -- accepted, ignored (notes.md Q5)
 	;
-	; $E1 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
+	; $F3 bytes used out of CPC_PRIV_SIZE ($400 = 1024). CPC_SYSVARS_USED
 	; below lets it be compared against .core.CPC_PRIV_SIZE by eye whenever
 	; this table grows.
 	    push namespace core
@@ -302,7 +311,12 @@ _s:
 	CB_TILESET          EQU SYSVAR_BASE + $C5   ; DW -- current tileset address
 	CB_KEYS             EQU SYSVAR_BASE + $C7   ; 10B -- keyboard matrix scan
 	SND_ENV             EQU SYSVAR_BASE + $D1   ; 16B -- envelope data buffer (fwsound.asm)
-	CPC_SYSVARS_USED    EQU $E1                 ; bytes used above; compare by eye against
+	GM_VEC              EQU SYSVAR_BASE + $E1   ; DW -- game-mode handler (0 = normal; isr.asm)
+	FH_ADDR             EQU SYSVAR_BASE + $E3   ; DW -- frame hook routine (0 = none)
+	FH_FRAMES           EQU SYSVAR_BASE + $E5   ; 4B -- frames counted (framehook.asm)
+	GM_COUNT            EQU SYSVAR_BASE + $E9   ; DB -- interrupts since last frame (game mode)
+	FH_BLOCK            EQU SYSVAR_BASE + $EA   ; 9B -- frame-flyback event block (framehook.asm)
+	CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
 ; The column count follows the screen mode at run time (TXT_COLS above:
@@ -497,6 +511,11 @@ __FW_CALL_IX_TARGET:
 	; The original handler (RAM &B941 on the 6128, &B939 on the 464; the
 	; same code in both ROMs) is read from the vector at boot.
 	;
+; Game mode (framehook.asm, opt-in): when GM_VEC is non-zero, interrupts
+	; outside firmware calls go to the handler it points to instead of the
+	; firmware, which then only runs during firmware calls. GM_VEC is zero
+	; (normal mode) unless a program switches game mode on.
+	;
 ; Cost: about 250 T-states on top of the firmware's handler, 300 times
 	; a second. See cpcbuild docs/phase4d-design.md.
 	    push namespace core
@@ -519,7 +538,10 @@ __CPC_ISR:
 	    ld   a, (IN_FW)
 	    or   a
 	    jr   nz, __CPC_ISR_DIRECT
-	    inc  a
+	    ld   a, (GM_VEC + 1)
+	    or   a
+    jr   nz, __CPC_ISR_GAME ; game mode (framehook.asm): skip the firmware
+	    inc  a                  ; A = 1
 	    ld   (IN_FW), a         ; an interrupt during the chain goes direct
 	    push bc
 	    push de
@@ -555,6 +577,13 @@ __CPC_ISR:
 	    ld   (IN_FW), a
 	    pop  af
 	    ei
+	    ret
+; Game mode: jump to the handler in GM_VEC with HL as it was and the
+	; program's AF still on the stack (the handler ends "pop af; ei; ret").
+__CPC_ISR_GAME:
+	    push hl
+	    ld   hl, (GM_VEC)
+	    ex   (sp), hl
 	    ret
 __CPC_ISR_DIRECT:
 	    pop  af
