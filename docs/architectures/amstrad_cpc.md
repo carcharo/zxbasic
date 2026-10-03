@@ -97,12 +97,12 @@ The constants are in one place, `src/arch/cpc/backend/main.py`, and the
 prologue emits them as `.core.CPC_PRIV_BASE`, `CPC_PRIV_SIZE`, `CPC_STACK_TOP`
 and `CPC_MEM_TOP`.
 
-**Reserved &4000-&7FFF.** A program that calls the cpcbuild library's
-`EnableDoubleBuffer` gets the label `.core.__CB_DBUF_RESERVED`, which makes
-the compiler reserve &4000-&7FFF for the second screen. Code and data must
+**Reserved &4000-&7FFF.** A program that defines the label
+`.core.__CPC_RESERVE_4000` (a library with a second screen does, such as
+cpcbuild's `EnableDoubleBuffer`) makes the compiler reserve &4000-&7FFF. Code and data must
 then fit in &1000-&3FFF (12 KB) and the heap must lie above &7FFF, or the
 build fails with `compiled code+data ... overlaps 0x4000-0x7FFF, reserved
-because the program uses double buffering`. Other programs are unaffected.
+because the program uses a library that reserves it`. Other programs are unaffected.
 Backends declare such ranges with `RESERVED_RANGE_LABELS`, checked in
 `check_memory_layout` in `zxbc.py`.
 
@@ -444,13 +444,6 @@ Files in `src/lib/arch/cpc/stdlib/`:
 |---|---|
 | `cpc.bas` | `Mode`, `GetMode`, `SetInk`, `SetBorder`, `WaitVsync`, `AyWrite`, `AyRead`, and the firmware sound calls `SoundQueue`, `SoundFree`, `SoundBusy`, `SoundEnvelope`, `SoundStop`. |
 | `framehook.bas` | `FrameHook(addr)`, `FrameHookOff()`, `Frames()`, `GameMode(on)`: an interrupt-driven frame hook (machine code that runs once per frame with interrupts off and registers saved) and opt-in game mode (firmware interrupt work off outside firmware calls). |
-| `cpcbuild.bas` | The cpcbuild library: includes the six files below. |
-| `cpcbuild/display.bas` | Frame sync, double buffering, `PokeScreen`, `PeekScreen`. |
-| `cpcbuild/sprites.bas` | `PutSprite`, `PutSpriteMasked`, `GetBlock`, clipped. |
-| `cpcbuild/fill.bas` | `PenByte`, `FillRect`, `ClearScreen`. |
-| `cpcbuild/tiles.bas` | 8x8 tiles and tile maps: `SetTileSet`, `DoTile8`, `DoTile16`, `TileMap`, `TileMapPart`, `TileRestore`. |
-| `cpcbuild/keyboard.bas` | Direct keyboard matrix scan: `ScanKeys`, `KeyDown`, `AnyKeyDown`, `KEY_*` and `JOY_*` constants. |
-| `cpcbuild/palette.bas` | `SetPalette`, `PalUpload`. |
 | `font.bas` | `SetFont`: replaces the glyphs of characters 32-127. |
 | `input.bas` | `INPUT(maxchars)` on the firmware keyboard. |
 | `play.bas` | MML Play for the AY, adapted to the CPC. |
@@ -458,9 +451,12 @@ Files in `src/lib/arch/cpc/stdlib/`:
 | `screen.bas` | `SCREEN$(row, col)` on TXT_RD_CHAR. |
 | `attr.bas`, `print42.bas`, `print64.bas`, `sinclair.bas` | Only an `#error` explaining why they are not available. |
 
+The cpcbuild graphics library (`cpcbuild.bas` and `cpcbuild/*.bas`) lives in
+the cpcbuild repository (`lib/`), not in this fork; build with `-I <cpcbuild>/lib`.
+
 The runtime is in `src/lib/arch/cpc/runtime/` (`bootstrap.asm`, `fwcall.asm`,
-`isr.asm`, `sysvars.asm`, `ay.asm`, `fwsound.asm`, `print.asm`, `fp_calc.asm`,
-`cpcbuild/*.asm` and the rest). Its header comments name the firmware entries
+`isr.asm`, `sysvars.asm`, `ay.asm`, `fwsound.asm`, `gacolour.asm`, `print.asm`,
+`fp_calc.asm` and the rest). Its header comments name the firmware entries
 each routine calls and the registers it clobbers.
 
 ## Further reading

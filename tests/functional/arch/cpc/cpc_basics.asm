@@ -68,7 +68,7 @@ _SetInk:
 #line 127 "src/lib/arch/cpc/stdlib/cpc.bas"
 		ld a, (ix+5)
 		ld c, (ix+7)
-		call .core.__CB_SET_INK
+		call .core.__CPC_SET_INK
 #line 132 "src/lib/arch/cpc/stdlib/cpc.bas"
 _SetInk__leave:
 	ld sp, ix
@@ -81,7 +81,7 @@ _SetInk__leave:
 	ret
 _SetBorder:
 #line 137 "src/lib/arch/cpc/stdlib/cpc.bas"
-		call .core.__CB_SET_BORDER
+		call .core.__CPC_SET_BORDER
 #line 140 "src/lib/arch/cpc/stdlib/cpc.bas"
 _SetBorder__leave:
 	ret
@@ -465,17 +465,8 @@ __CPC_AY_READ_DI:
 	;                                    the central 32K -- it is)
 ;   $B5     10    CIRC_VARS          circle.asm: centre X/Y, x, y, d
 ;   $BF     1     PAUSE_TICK         pause.asm: last 300 Hz tick count
-;   $C0     1     CB_BASE            cpcbuild/core.asm: high byte of the
-	;                                    screen the library draws on (&C0, or
-	;                                    &40 for the double-buffer back screen)
-;   $C1     1     CB_SHOWN           cpcbuild/core.asm: high byte of the
-	;                                    screen being displayed
-;   $C2     2     CB_OFFSET          cpcbuild/core.asm: the firmware's
-	;                                    hardware-scroll offset, 0-&7FE bytes
-;   $C4     1     CB_DBUF            cpcbuild/core.asm: 1 = double buffering
-;   $C5     2     CB_TILESET         cpcbuild tiles: current tileset
-;   $C7     10    CB_KEYS            cpcbuild keyboard: the last matrix
-;                                    scan, rows 0-9 (bit = 0: pressed)
+	;   $C0    17     (free)             was the cpcbuild library's state; the
+	;                                    library now keeps it in its own storage
 ;   $D1     16    SND_ENV            fwsound.asm: volume envelope data
 	;                                    buffer for SOUND_AMPL_ENVELOPE
 ;   $E1     2     GM_VEC             isr.asm: game-mode handler address
@@ -552,12 +543,7 @@ __CPC_AY_READ_DI:
 	SOUND_BLK           EQU SYSVAR_BASE + $AC   ; 9B -- SOUND_QUEUE block (beep.asm)
 	CIRC_VARS           EQU SYSVAR_BASE + $B5   ; 10B -- CIRCLE state (circle.asm)
 	PAUSE_TICK          EQU SYSVAR_BASE + $BF   ; DB -- PAUSE's last tick count (pause.asm)
-	CB_BASE             EQU SYSVAR_BASE + $C0   ; DB -- screen the library draws on (high byte)
-	CB_SHOWN            EQU SYSVAR_BASE + $C1   ; DB -- screen displayed (high byte)
-	CB_OFFSET           EQU SYSVAR_BASE + $C2   ; DW -- hardware-scroll offset (bytes)
-	CB_DBUF             EQU SYSVAR_BASE + $C4   ; DB -- 1 = double buffering on
-	CB_TILESET          EQU SYSVAR_BASE + $C5   ; DW -- current tileset address
-	CB_KEYS             EQU SYSVAR_BASE + $C7   ; 10B -- keyboard matrix scan
+	; $C0-$D0 are free (17 bytes).
 	SND_ENV             EQU SYSVAR_BASE + $D1   ; 16B -- envelope data buffer (fwsound.asm)
 	GM_VEC              EQU SYSVAR_BASE + $E1   ; DW -- game-mode handler (0 = normal; isr.asm)
 	FH_ADDR             EQU SYSVAR_BASE + $E3   ; DW -- frame hook routine (0 = none)
@@ -1027,124 +1013,6 @@ CLS:
 	    ENDP
 	    pop namespace
 #line 230 "src/lib/arch/cpc/stdlib/cpc.bas"
-#line 1 "src/lib/arch/cpc/runtime/cpcbuild/palette.asm"
-	; -----------------------------------------------------------------------
-	; cpcbuild library -- palette, firmware and Gate Array together
-	;
-	; Written from scratch for this project (MIT); see core.asm. From the
-	; public documentation of the Gate Array's colour registers and colour
-	; numbers (cpcwiki.eu), checked in the emulator (tools/palette_check.py).
-	;
-; A colour change goes two ways (notes.md, Q-4c palette decision): through
-	; the firmware (SCR_SET_INK / SCR_SET_BORDER), so its own ink tables stay
-	; right, and straight to the Gate Array, so it shows at once instead of
-	; at the firmware's next ink update.
-	;
-; Gate Array write (port &7Fxx): first a pen-select byte (0-15, or &10
-	; for the border), then a colour byte &40 + hardware colour code (0-31).
-	; The firmware numbers colours 0-26; __CB_HWCOL maps them to the codes.
-	    push namespace core
-	; Firmware colour number (0-26) -> Gate Array colour byte (&40 + code).
-__CB_HWCOL:
-	    defb $54, $44, $55, $5C, $58, $5D, $4C, $45, $4D     ;  0- 8
-	    defb $56, $46, $57, $5E, $40, $5F, $4E, $47, $4F     ;  9-17
-	    defb $52, $42, $53, $5A, $59, $5B, $4A, $43, $4B     ; 18-26
-	; __CB_GA_SET -- writes one colour to the Gate Array only (the firmware's
-	; tables are not touched). A = pen 0-15, or 16 for the border; C =
-	; firmware colour 0-26. Out-of-range values are ignored. The two writes
-	; are made with interrupts off (the firmware's interrupt handler selects
-	; pens too, for flashing inks), and it returns with interrupts on.
-; Firmware entries called: none.
-; Registers clobbered: AF, BC, HL.
-__CB_GA_SET:
-	    PROC
-	    LOCAL __CGS_NOADD
-	    cp   17
-	    ret  nc
-	    ld   b, a               ; B = pen select byte
-	    ld   a, c
-	    cp   27
-	    ret  nc
-	    ld   hl, __CB_HWCOL
-	    add  a, l
-	    ld   l, a
-	    jr   nc, __CGS_NOADD
-	    inc  h
-__CGS_NOADD:
-	    ld   c, (hl)            ; C = colour byte
-	    ld   a, b
-	    ld   b, $7F             ; port &7Fxx; the low byte is ignored
-	    di
-	    out  (c), a             ; select the pen
-    out  (c), c             ; colour: data = C
-	    ei
-	    ret
-	    ENDP
-; __CB_SET_INK -- A = pen (0-15), C = firmware colour 0-26: sets it in
-; the firmware (not flashing: both inks the same) and on the Gate Array.
-	; Colours above 26 and pens above 15 are ignored (the firmware itself
-	; wraps pen 16 round to pen 0, so it is not passed on).
-; Firmware entry called: SCR_SET_INK (&BC32, A = pen, B and C = colour).
-; Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF' (the gate).
-__CB_SET_INK:
-	    cp   16
-	    ret  nc
-	    ld   b, a
-	    ld   a, c
-	    cp   27
-	    ret  nc
-	    ld   a, b
-	    ld   b, c
-	    push af
-	    push bc
-	    call .core.__FW_CALL
-	    defw $BC32
-	    pop  bc
-	    pop  af
-	    jp   __CB_GA_SET
-; __CB_SET_BORDER -- A = firmware colour 0-26: sets the border in the
-	; firmware and on the Gate Array. Colours above 26 are ignored.
-; Firmware entry called: SCR_SET_BORDER (&BC38, B and C = colour).
-; Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF' (the gate).
-__CB_SET_BORDER:
-	    cp   27
-	    ret  nc
-	    ld   b, a
-	    ld   c, a
-	    push bc
-	    call .core.__FW_CALL
-	    defw $BC38
-	    pop  bc
-	    ld   a, 16
-	    jp   __CB_GA_SET
-	; __CB_PAL_UPLOAD -- HL = list of firmware colours, B = count, C = first
-; pen: pen C gets the first colour, C+1 the next, and so on, each set
-	; with __CB_SET_INK. Stops after pen 15; a count of 0 does nothing.
-; Firmware entry called: SCR_SET_INK (&BC32), once per pen.
-; Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF' (the gate).
-__CB_PAL_UPLOAD:
-	    PROC
-	    LOCAL __CPU_LOOP
-__CPU_LOOP:
-	    ld   a, b
-	    or   a
-	    ret  z
-	    ld   a, c
-	    cp   16
-	    ret  nc
-	    push bc
-	    push hl
-	    ld   c, (hl)
-	    call __CB_SET_INK       ; A = pen, C = colour
-	    pop  hl
-	    pop  bc
-	    inc  hl
-	    inc  c
-	    djnz __CPU_LOOP
-	    ret
-	    ENDP
-	    pop namespace
-#line 232 "src/lib/arch/cpc/stdlib/cpc.bas"
 #line 1 "src/lib/arch/cpc/runtime/fwsound.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC firmware sound manager, non-blocking entries
@@ -1286,6 +1154,99 @@ __CPC_SND_RESET:
 	    call .core.__FW_CALL_IX
 	    defw $BCA7
 	    ret
+	    pop namespace
+#line 233 "src/lib/arch/cpc/stdlib/cpc.bas"
+#line 1 "src/lib/arch/cpc/runtime/gacolour.asm"
+	; -----------------------------------------------------------------------
+	; Colours -- firmware and Gate Array together (SetInk, SetBorder)
+	;
+	; Written from scratch for this project (MIT); see cpc.bas. From the
+	; public documentation of the Gate Array's colour registers and colour
+	; numbers (cpcwiki.eu), checked in the emulator (cpcbuild's
+	; tools/palette_check.py).
+	;
+; A colour change goes two ways (notes.md, Q-4c palette decision): through
+	; the firmware (SCR_SET_INK / SCR_SET_BORDER), so its own ink tables stay
+	; right, and straight to the Gate Array, so it shows at once instead of
+	; at the firmware's next ink update.
+	;
+; Gate Array write (port &7Fxx): first a pen-select byte (0-15, or &10
+	; for the border), then a colour byte &40 + hardware colour code (0-31).
+	; The firmware numbers colours 0-26; __CPC_HWCOL maps them to the codes.
+	    push namespace core
+	; Firmware colour number (0-26) -> Gate Array colour byte (&40 + code).
+__CPC_HWCOL:
+	    defb $54, $44, $55, $5C, $58, $5D, $4C, $45, $4D     ;  0- 8
+	    defb $56, $46, $57, $5E, $40, $5F, $4E, $47, $4F     ;  9-17
+	    defb $52, $42, $53, $5A, $59, $5B, $4A, $43, $4B     ; 18-26
+	; __CPC_GA_SET -- writes one colour to the Gate Array only (the firmware's
+	; tables are not touched). A = pen 0-15, or 16 for the border; C =
+	; firmware colour 0-26. Out-of-range values are ignored. The two writes
+	; are made with interrupts off (the firmware's interrupt handler selects
+	; pens too, for flashing inks), and it returns with interrupts on.
+; Firmware entries called: none.
+; Registers clobbered: AF, BC, HL.
+__CPC_GA_SET:
+	    PROC
+	    LOCAL __CGS_NOADD
+	    cp   17
+	    ret  nc
+	    ld   b, a               ; B = pen select byte
+	    ld   a, c
+	    cp   27
+	    ret  nc
+	    ld   hl, __CPC_HWCOL
+	    add  a, l
+	    ld   l, a
+	    jr   nc, __CGS_NOADD
+	    inc  h
+__CGS_NOADD:
+	    ld   c, (hl)            ; C = colour byte
+	    ld   a, b
+	    ld   b, $7F             ; port &7Fxx; the low byte is ignored
+	    di
+	    out  (c), a             ; select the pen
+    out  (c), c             ; colour: data = C
+	    ei
+	    ret
+	    ENDP
+; __CPC_SET_INK -- A = pen (0-15), C = firmware colour 0-26: sets it in
+; the firmware (not flashing: both inks the same) and on the Gate Array.
+	; Colours above 26 and pens above 15 are ignored (the firmware itself
+	; wraps pen 16 round to pen 0, so it is not passed on).
+; Firmware entry called: SCR_SET_INK (&BC32, A = pen, B and C = colour).
+; Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF' (the gate).
+__CPC_SET_INK:
+	    cp   16
+	    ret  nc
+	    ld   b, a
+	    ld   a, c
+	    cp   27
+	    ret  nc
+	    ld   a, b
+	    ld   b, c
+	    push af
+	    push bc
+	    call .core.__FW_CALL
+	    defw $BC32
+	    pop  bc
+	    pop  af
+	    jp   __CPC_GA_SET
+; __CPC_SET_BORDER -- A = firmware colour 0-26: sets the border in the
+	; firmware and on the Gate Array. Colours above 26 are ignored.
+; Firmware entry called: SCR_SET_BORDER (&BC38, B and C = colour).
+; Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF' (the gate).
+__CPC_SET_BORDER:
+	    cp   27
+	    ret  nc
+	    ld   b, a
+	    ld   c, a
+	    push bc
+	    call .core.__FW_CALL
+	    defw $BC38
+	    pop  bc
+	    ld   a, 16
+	    jp   __CPC_GA_SET
 	    pop namespace
 #line 234 "src/lib/arch/cpc/stdlib/cpc.bas"
 	END

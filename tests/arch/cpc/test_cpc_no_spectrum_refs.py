@@ -137,31 +137,6 @@ CORPUS: dict[str, str] = {
         BEEP d, p
         END
     """,
-    "cpcbuild": """
-        #include <cpcbuild.bas>
-        DIM spr(63) AS UBYTE
-        DIM tiles(31) AS UBYTE
-        DIM map(3) AS UBYTE
-        DIM pal(3) AS UBYTE
-        ScreenInit()
-        PutSprite(10, 20, 4, 16, @spr)
-        PutSpriteMasked(-2, 190, 2, 16, @spr)
-        GetBlock(0, 0, 4, 16, @spr)
-        FillRect(0, 0, 10, 10, 2)
-        ClearScreen(PenByte(1))
-        SetTileSet(@tiles)
-        DoTile8(1, 1, 0)
-        DoTile16(2, 2, 0)
-        TileMap(@map, 0, 0, 2, 2)
-        ScanKeys()
-        PRINT KeyDown(KEY_SPACE), AnyKeyDown()
-        SetPalette(@pal, 4)
-        PalUpload(@pal, 2, 2)
-        PokeScreen(0, 0, PeekScreen(1, 1))
-        WaitRetrace(1)
-        FlipBuffer()
-        END
-    """,
     "cpc_stdlib": """
         #include <cpc.bas>
         #include <point.bas>

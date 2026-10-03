@@ -1,13 +1,13 @@
 # --------------------------------------------------------------------
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # --------------------------------------------------------------------
-# Phase 4c compiler-side checks for --arch cpc (the library itself is
-# checked in the emulator by cpcbuild's tests/conformance/cb_*.bas):
+# Phase 4c compiler-side checks for --arch cpc:
 #
-# - check_memory_layout()'s RESERVED_RANGE_LABELS: a program that calls
-#   cpcbuild's EnableDoubleBuffer gets &4000-&7FFF reserved for the back
-#   screen; code+data and the heap must stay out of it. Programs that
-#   don't call it are unaffected.
+# - check_memory_layout()'s RESERVED_RANGE_LABELS: a program that defines
+#   the generic label .core.__CPC_RESERVE_4000 (as a library with a back
+#   screen does, e.g. cpcbuild's EnableDoubleBuffer, checked in the emulator
+#   by cpcbuild's tests) gets &4000-&7FFF reserved; code+data and the heap
+#   must stay out of it. Programs that don't define it are unaffected.
 # --------------------------------------------------------------------
 
 import os
@@ -22,14 +22,15 @@ from src.zxbc import zxbc as zxbc_module
 _ZXBC = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, os.pardir, "zxbc.py")
 
 _DBUF = """
-#include <cpcbuild/display.bas>
-EnableDoubleBuffer()
-FlipBuffer()
+ASM
+push namespace core
+__CPC_RESERVE_4000:
+pop namespace
+END ASM
 """
 
 _NO_DBUF = """
-#include <cpcbuild/display.bas>
-WaitRetrace(1)
+PRINT 1
 """
 
 # about 13 KB of padding: pushes the code past &4000
@@ -55,7 +56,7 @@ def test_double_buffer_small_program_builds(tmp_path):
 def test_double_buffer_code_past_4000_is_an_error(tmp_path):
     result = _compile(tmp_path, _DBUF + _BIG)
     assert result.returncode != 0
-    assert "reserved because the program uses double buffering" in result.stderr
+    assert "reserved because the program uses a library that reserves it" in result.stderr
 
 
 def test_double_buffer_heap_below_8000_is_an_error(tmp_path):

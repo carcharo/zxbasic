@@ -299,17 +299,8 @@ _screen__leave:
 	;                                    the central 32K -- it is)
 ;   $B5     10    CIRC_VARS          circle.asm: centre X/Y, x, y, d
 ;   $BF     1     PAUSE_TICK         pause.asm: last 300 Hz tick count
-;   $C0     1     CB_BASE            cpcbuild/core.asm: high byte of the
-	;                                    screen the library draws on (&C0, or
-	;                                    &40 for the double-buffer back screen)
-;   $C1     1     CB_SHOWN           cpcbuild/core.asm: high byte of the
-	;                                    screen being displayed
-;   $C2     2     CB_OFFSET          cpcbuild/core.asm: the firmware's
-	;                                    hardware-scroll offset, 0-&7FE bytes
-;   $C4     1     CB_DBUF            cpcbuild/core.asm: 1 = double buffering
-;   $C5     2     CB_TILESET         cpcbuild tiles: current tileset
-;   $C7     10    CB_KEYS            cpcbuild keyboard: the last matrix
-;                                    scan, rows 0-9 (bit = 0: pressed)
+	;   $C0    17     (free)             was the cpcbuild library's state; the
+	;                                    library now keeps it in its own storage
 ;   $D1     16    SND_ENV            fwsound.asm: volume envelope data
 	;                                    buffer for SOUND_AMPL_ENVELOPE
 ;   $E1     2     GM_VEC             isr.asm: game-mode handler address
@@ -386,12 +377,7 @@ _screen__leave:
 	SOUND_BLK           EQU SYSVAR_BASE + $AC   ; 9B -- SOUND_QUEUE block (beep.asm)
 	CIRC_VARS           EQU SYSVAR_BASE + $B5   ; 10B -- CIRCLE state (circle.asm)
 	PAUSE_TICK          EQU SYSVAR_BASE + $BF   ; DB -- PAUSE's last tick count (pause.asm)
-	CB_BASE             EQU SYSVAR_BASE + $C0   ; DB -- screen the library draws on (high byte)
-	CB_SHOWN            EQU SYSVAR_BASE + $C1   ; DB -- screen displayed (high byte)
-	CB_OFFSET           EQU SYSVAR_BASE + $C2   ; DW -- hardware-scroll offset (bytes)
-	CB_DBUF             EQU SYSVAR_BASE + $C4   ; DB -- 1 = double buffering on
-	CB_TILESET          EQU SYSVAR_BASE + $C5   ; DW -- current tileset address
-	CB_KEYS             EQU SYSVAR_BASE + $C7   ; 10B -- keyboard matrix scan
+	; $C0-$D0 are free (17 bytes).
 	SND_ENV             EQU SYSVAR_BASE + $D1   ; 16B -- envelope data buffer (fwsound.asm)
 	GM_VEC              EQU SYSVAR_BASE + $E1   ; DW -- game-mode handler (0 = normal; isr.asm)
 	FH_ADDR             EQU SYSVAR_BASE + $E3   ; DW -- frame hook routine (0 = none)

@@ -55,13 +55,15 @@ class Backend(Z80Backend):
     MAX_CODE_ADDRESS = _PRIV_BASE
 
     # Address ranges reserved only in programs that define the label
-    # (checked by zxbc's memory-layout check): EnableDoubleBuffer
-    # (cpcbuild/display.bas) makes &4000-&7FFF the back screen.
+    # (checked by zxbc's memory-layout check). A library that wants the
+    # second 16 KB screen area (a double-buffered back screen, say) defines
+    # `.core.__CPC_RESERVE_4000` in an asm block, in code that is only
+    # compiled in when the program uses it.
     RESERVED_RANGE_LABELS = {
-        ".core.__CB_DBUF_RESERVED": (
+        ".core.__CPC_RESERVE_4000": (
             0x4000,
             0x8000,
-            "the program uses double buffering (cpcbuild EnableDoubleBuffer: the back screen)",
+            "the program uses a library that reserves it (such as a double-buffered back screen)",
         ),
     }
 

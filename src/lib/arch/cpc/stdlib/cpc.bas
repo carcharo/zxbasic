@@ -121,13 +121,13 @@ end function
 
 ' Firmware: SCR_SET_INK (&BC32, A = pen, B and C = the colour twice,
 ' i.e. not flashing); then the same colour straight to the Gate Array,
-' so it shows at once (runtime/cpcbuild/palette.asm). Pens 0-15 (use
+' so it shows at once (runtime/gacolour.asm). Pens 0-15 (use
 ' SetBorder for the border); pens above 15 and colours above 26 are ignored.
 sub SetInk(pen as ubyte, colour as ubyte)
     asm
     ld a, (ix+5)
     ld c, (ix+7)
-    call .core.__CB_SET_INK
+    call .core.__CPC_SET_INK
     end asm
 end sub
 
@@ -135,7 +135,7 @@ end sub
 ' colour straight to the Gate Array. Colours above 26 are ignored.
 sub fastcall SetBorder(colour as ubyte)
     asm
-    call .core.__CB_SET_BORDER
+    call .core.__CPC_SET_BORDER
     end asm
 end sub
 
@@ -225,7 +225,7 @@ end sub
 #require "fwcall.asm"
 #require "colour.asm"
 #require "cls.asm"
-#require "cpcbuild/palette.asm"
+#require "gacolour.asm"
 #require "ay.asm"
 #require "fwsound.asm"
 
