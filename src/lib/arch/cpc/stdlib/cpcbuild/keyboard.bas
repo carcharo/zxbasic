@@ -12,10 +12,10 @@
 ' (e.g. after WaitRetrace) and then test as many keys as you like.
 '
 ' ScanKeys leaves the PPI as the firmware expects it, so INKEY$, INPUT
-' and the rest keep working. The firmware's own scan (inside its
-' interrupt, which only runs during firmware calls) still collects
-' typed keys into its buffer: after a loop of ScanKeys, INKEY$ still
-' returns what was typed meanwhile.
+' and the rest keep working. The firmware's own scan (in its interrupt
+' handler, which runs all the time) still collects typed keys into its
+' buffer: after a loop of ScanKeys, INKEY$ still returns what was typed
+' meanwhile.
 ' Two keys can "ghost" a third on the matrix, as on any CPC.
 '
 ' Written from scratch for this project (MIT).

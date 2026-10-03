@@ -125,11 +125,10 @@
 ' - (cpc) The tempo assumes the CPC's 4 MHz Z80 (1 us per NOP-unit); see the port notes at the top of this file.
 '
 ' - (cpc) The sound chip belongs to Play while it runs: SOUND_RESET is called first so firmware sounds (BEEP, SOUND)
-'   already queued are cancelled, and the keyboard and firmware clock don't run during the music (interrupts are
-'   off). Don't use BEEP/SOUND at the same time as AyWrite or Play; after Play returns, BEEP works again.
+'   already queued are cancelled, and Play runs with interrupts off, so the keyboard and firmware clock don't run
+'   during the music. Don't use BEEP/SOUND at the same time as AyWrite or Play; after Play returns, BEEP works again.
 '   The `--enable-break` option is not supported with Play on the CPC: its per-line check goes through the firmware
-'   gate, which turns interrupts on in the middle of the music (the firmware's keyboard scan would then collide with
-'   the AY writes).
+'   gate, which enables interrupts, and the firmware's keyboard scan would collide with the AY writes.
 '
 ' - The strings are passed by value and thus are copied on the routine invocation.
 '   The memory-effective version of this routine is yet to be implemented.
@@ -172,9 +171,8 @@ dim _Play_NoteLengthsInTicks(1 to 12) as ubyte => { _
 }
 
 ' Divider values that need to be sent to the audio chip registers to play the notes.
-' Note that the lowest notes in octave 0 are unplayable because of 12-bit overflow and probably wrong notes will be
-' played instead of them.
-' TODO: replace them with maximum possible values or zeros? See how it's done in Sinclair Play.
+' On the CPC (1 MHz AY clock), the lowest notes in octave 0 fit in 12 bits (3822 for C0),
+' so they play correctly here.
 ' TODO: in Sinclair Play it is possible to play notes in higher octaves (using several sharps in a row).
 '       Need to add more values to the table.
 dim _Play_NoteDividers(0 to _Play_NotesPerOctave * _Play_TotalOctaves - 1) as uinteger = { _
