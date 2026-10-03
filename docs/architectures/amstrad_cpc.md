@@ -12,9 +12,7 @@ The architecture is tested in emulators (Caprice32 and floooh/chips) on the
 464 (with a disc drive), 664 and 6128. It uses only firmware entries that all
 three models have. The CPC Plus machines are not a target yet.
 
-This page describes the target. The platform library built on top of it
-(sprites, tiles, double buffering, keyboard matrix, palette) is called
-cpcbuild and is documented in its own repository, `cpcbuild/docs/library.md`.
+This page describes the target architecture and the compiler features.
 
 ## Building and running
 
@@ -98,12 +96,11 @@ prologue emits them as `.core.CPC_PRIV_BASE`, `CPC_PRIV_SIZE`, `CPC_STACK_TOP`
 and `CPC_MEM_TOP`.
 
 **Reserved &4000-&7FFF.** A program that defines the label
-`.core.__CPC_RESERVE_4000` (a library with a second screen does, such as
-cpcbuild's `EnableDoubleBuffer`) makes the compiler reserve &4000-&7FFF. Code and data must
-then fit in &1000-&3FFF (12 KB) and the heap must lie above &7FFF, or the
-build fails with `compiled code+data ... overlaps 0x4000-0x7FFF, reserved
-because the program uses a library that reserves it`. Other programs are unaffected.
-Backends declare such ranges with `RESERVED_RANGE_LABELS`, checked in
+`.core.__CPC_RESERVE_4000` (a library with a second screen buffer does, for example)
+makes the compiler reserve &4000-&7FFF. Code and data must then fit in &1000-&3FFF (12 KB)
+and the heap must lie above &7FFF, or the build fails with `compiled code+data ... overlaps
+0x4000-0x7FFF, reserved because the program uses a library that reserves it`. Other programs are
+unaffected. Backends declare such ranges with `RESERVED_RANGE_LABELS`, checked in
 `check_memory_layout` in `zxbc.py`.
 
 **Central 32K.** While the firmware runs, the lower ROM (&0000-&3FFF) and, for
@@ -173,10 +170,8 @@ the interrupt load drops from about 14.5 % to about 3.3 % of the CPU (busy-loop
 measurement). While in game mode and not inside a firmware call, the
 firmware's key buffer (INKEY$), its 300 Hz clock, its sound queue (BEEP,
 `SoundQueue`) and its ink refresh stop; firmware calls themselves still work.
-Use a direct keyboard scan, `Frames()` and the hook instead. The cpcbuild
-library's music player runs on this hook
-([library reference](https://github.com/carcharo/cpcbuild/blob/main/docs/library.md),
-section 7.8).
+Use a direct keyboard scan, `Frames()` and the hook instead. A music player
+that writes the AY directly can run on this hook.
 
 **Rules for inline `asm`:**
 
@@ -317,9 +312,6 @@ a key. The key that ends a pause is put back in the buffer for INKEY$.
 With `--enable-break`, ESC (key 66) raises the break error. It is seen within a
 few loop iterations.
 
-Games that need several keys at once, or the joystick, should use the cpcbuild
-library's `ScanKeys` and `KeyDown`, which read the keyboard matrix directly.
-
 ## Sound
 
 **BEEP** has the Spectrum's arguments (duration in seconds, pitch in semitones
@@ -349,15 +341,15 @@ AY clock, timing for the CPC (tempo within 0.6 % in tests), and a mixer value
 that keeps register 7 bit 6 clear. Play runs its whole tune with interrupts
 off, so the keyboard and the firmware clock stop until it returns.
 
-**Music and sound effects (Arkos Tracker).** The cpcbuild library includes an
-interrupt-driven music player (Arkos Tracker 3.7, MIT licensed) that plays songs
-and sound effects from the frame hook. The player is built into `<music/music.bas>`
-in the cpcbuild repository; it is not part of the compiler fork. See
-[cpcbuild's library reference](https://github.com/carcharo/cpcbuild/blob/main/docs/library.md) section 7.9.
+**Music and sound effects.** A music player library can play songs and sound
+effects through the AY from the frame hook. The player runs with interrupts off,
+so the keyboard and the firmware clock stop meanwhile (outside firmware calls if
+in game mode). After using such a player, call `SoundStop` before going back to BEEP
+or `SoundQueue`.
 
 **One owner of the sound chip.** Either the firmware sound manager (BEEP,
-`SoundQueue`), the music player, or direct access (`AyWrite`, Play) owns the AY
-at any one time, never more than one. The music player calls `SoundStop` so the
+`SoundQueue`), a music player library, or direct access (`AyWrite`, Play) owns the AY
+at any one time, never more than one. A music player calls `SoundStop` so the
 manager is idle. After using Play or AyWrite, call `SoundStop` before going
 back to BEEP or `SoundQueue`, and never queue firmware sounds while another owner
 is in use. After Play returns, BEEP works again.
@@ -425,7 +417,7 @@ belongs to the firmware.
 | `#include <attr.bas>` (ATTR, SETATTR, ATTRADDR) | `#error`: the CPC has no colour attributes; use INK/PAPER, and POINT from `point.bas` |
 | `#include <print42.bas>`, `<print64.bas>` | `#error`: they write Spectrum screen memory; use mode 2 for 80 columns |
 | `#include <sinclair.bas>` | `#error`: it bundles Spectrum-only libraries; include `point.bas`, `input.bas` or `alloc.bas` directly |
-| `#include <cpc.bas>`, `<cpcbuild.bas>` on another architecture | `#error` |
+| `#include <cpc.bas>` or `<framehook.bas>` on another architecture | `#error` |
 | Code and data past &9E00, or into a reserved range | Build error (exit code 5) |
 | LOAD, SAVE, VERIFY | Compiles; the program stops at run time |
 | USR with a Spectrum ROM address, POKE of Spectrum system variables | Compile fine; meaningless on the CPC |
@@ -451,13 +443,19 @@ Files in `src/lib/arch/cpc/stdlib/`:
 | `screen.bas` | `SCREEN$(row, col)` on TXT_RD_CHAR. |
 | `attr.bas`, `print42.bas`, `print64.bas`, `sinclair.bas` | Only an `#error` explaining why they are not available. |
 
-The cpcbuild graphics library (`cpcbuild.bas` and `cpcbuild/*.bas`) lives in
-the cpcbuild repository (`lib/`), not in this fork; build with `-I <cpcbuild>/lib`.
-
 The runtime is in `src/lib/arch/cpc/runtime/` (`bootstrap.asm`, `fwcall.asm`,
 `isr.asm`, `sysvars.asm`, `ay.asm`, `fwsound.asm`, `gacolour.asm`, `print.asm`,
 `fp_calc.asm` and the rest). Its header comments name the firmware entries
 each routine calls and the registers it clobbers.
+
+## An example project: CPCBuild
+
+[CPCBuild](https://github.com/carcharo/cpcbuild) is an example project that uses
+the `--arch cpc` target and extends it with additional libraries built on top of the
+compiler's features: graphics routines for sprites, tiles, fills and double buffering;
+a keyboard matrix scanner; palette manipulation; and an Arkos Tracker 3.7 music player
+that runs on the frame hook. For documentation of those libraries, see
+[CPCBuild's library reference](https://github.com/carcharo/cpcbuild/blob/main/docs/library.md).
 
 ## Further reading
 
