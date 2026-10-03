@@ -144,3 +144,81 @@ def test_zx48k_default_heap_is_unaffected(tmp_path):
 
     assert zxbc.main(["--arch", "zx48k", bas, "-o", out]) == 0
     assert os.path.isfile(out)
+
+
+# --- low origins: $0000-$003F (restarts, interrupt vectors) are off limits,
+# $0040 up is fine (proven on emulators, see cpcbuild docs/notes.md) ---
+
+
+@pytest.mark.parametrize("org", ["0", "0x30", "0x38", "0x3F"])
+def test_cpc_org_below_0040_is_an_error(tmp_path, capsys, org):
+    """An origin inside the restart area would overwrite the firmware's
+    restarts and vectors."""
+    bas = _write(tmp_path, "low.bas", _FITS_PROGRAM)
+    out = os.path.join(tmp_path, "low.bin")
+
+    rc = zxbc.main(["--arch", "cpc", "--org", org, bas, "-o", out])
+
+    assert rc != 0
+    assert not os.path.exists(out), "must not write a binary that overwrites the restarts"
+    err = capsys.readouterr().err
+    assert "below this architecture's lowest usable address of 0x0040" in err
+    assert "restarts" in err
+
+
+def test_cpc_org_0040_is_accepted(tmp_path):
+    """The lowest usable origin compiles, and the binary starts there."""
+    bas = _write(tmp_path, "low.bas", _HEAP_PROGRAM)
+    out = os.path.join(tmp_path, "low.bin")
+    mmap = os.path.join(tmp_path, "low.map")
+
+    assert zxbc.main(["--arch", "cpc", "--org", "0x40", "-M", mmap, bas, "-o", out]) == 0
+    assert os.path.getsize(out) > 0
+    with open(mmap, encoding="utf-8") as f:
+        assert "0040: .core.__START_PROGRAM" in f.read().splitlines()
+
+
+def test_cpc_org_0040_default_heap_still_fits(tmp_path):
+    """The default top-aligned heap is independent of the origin."""
+    bas = _write(tmp_path, "low_heap.bas", _HEAP_PROGRAM)
+    out = os.path.join(tmp_path, "low_heap.bin")
+
+    assert zxbc.main(["--arch", "cpc", "--org", "0x40", bas, "-o", out]) == 0
+
+
+# A program that defines the label that reserves $4000-$7FFF (what a
+# double-buffered back screen does) and is padded past $4000 from a low
+# origin.
+_RESERVE_ASM = """
+asm
+  .core.__CPC_RESERVE_4000:
+end asm
+"""
+_BIG_PROGRAM = """
+DIM a(17000) AS UBYTE
+a(1) = 1
+PRINT a(1)
+END
+"""
+
+
+def test_cpc_reserved_range_below_it_at_low_org(tmp_path):
+    """At $0040 a program that reserves $4000-$7FFF still fits as long as
+    it ends below $4000."""
+    bas = _write(tmp_path, "res_ok.bas", _RESERVE_ASM + _FITS_PROGRAM)
+    out = os.path.join(tmp_path, "res_ok.bin")
+
+    assert zxbc.main(["--arch", "cpc", "--org", "0x40", bas, "-o", out]) == 0
+
+
+def test_cpc_reserved_range_overlapped_from_low_org_is_an_error(tmp_path, capsys):
+    """Starting low doesn't lift the reservation: code that runs past
+    $4000 into the reserved range is still rejected."""
+    bas = _write(tmp_path, "res_bad.bas", _RESERVE_ASM + _BIG_PROGRAM)
+    out = os.path.join(tmp_path, "res_bad.bin")
+
+    rc = zxbc.main(["--arch", "cpc", "--org", "0x40", bas, "-o", out])
+
+    assert rc != 0
+    assert not os.path.exists(out)
+    assert "reserved because" in capsys.readouterr().err

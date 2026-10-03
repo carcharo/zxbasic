@@ -87,7 +87,8 @@ def check_memory_layout(backend, heap_in_use: bool, org: int, length: int, label
     :param backend: the target architecture's Backend instance. Its
         MAX_CODE_ADDRESS (None by default) lets an arch declare an
         absolute upper bound for code+data, e.g. the cpc's private
-        runtime block.
+        runtime block; MIN_CODE_ADDRESS (with MIN_CODE_REASON) a lowest
+        origin, e.g. the cpc's restart vectors.
     :param heap_in_use: whether the heap start EQU was actually emitted
         (i.e. the program uses something that requires a heap). A heap
         placed at a fixed address that the program never uses can't be
@@ -119,6 +120,14 @@ def check_memory_layout(backend, heap_in_use: bool, org: int, length: int, label
                 "the heap (0x%04X-0x%04X) overlaps 0x%04X-0x%04X, reserved because %s"
                 % (heap_address, heap_address + OPTIONS.heap_size - 1, start, stop - 1, reason),
             )
+
+    min_code_address = getattr(backend, "MIN_CODE_ADDRESS", None)
+    if min_code_address is not None and org < min_code_address:
+        errmsg.error(
+            0,
+            "origin 0x%04X is below this architecture's lowest usable address of 0x%04X%s"
+            % (org, min_code_address, " (%s)" % backend.MIN_CODE_REASON if backend.MIN_CODE_REASON else ""),
+        )
 
     max_code_address = backend.MAX_CODE_ADDRESS
     if max_code_address is not None and end > max_code_address:

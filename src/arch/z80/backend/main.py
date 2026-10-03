@@ -157,6 +157,12 @@ class Backend(BackendInterface):
     # block).
     MAX_CODE_ADDRESS: int | None = None
 
+    # Lowest address (inclusive) compiled code+data may start at, or None
+    # for no limit, with MIN_CODE_REASON saying why for the error message.
+    # Same check as MAX_CODE_ADDRESS (e.g. the cpc's restart vectors).
+    MIN_CODE_ADDRESS: int | None = None
+    MIN_CODE_REASON: str = ""
+
     def _set_quad_table(self):
         """Lowlevel (to ASM) instructions implementation"""
         self._QUAD_TABLE: dict[ICInstruction, ICInfo] = {

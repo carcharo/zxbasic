@@ -16,6 +16,13 @@
 #   tools/cpc/run.sh prog.bin
 #   tools/cpc/run.sh --shot prog.bas|prog.bin   # headless, one screenshot
 #   CPC_MODEL=464 tools/cpc/run.sh ...         # emulate a 464 (or 664/6128)
+#   ORG=0x40 tools/cpc/run.sh prog.bas         # build at another origin
+#
+# Origin: for a .bas, ORG (if set) is passed to zxbc as --org, and the
+# AMSDOS load/exec address is read back from the memory map zxbc writes
+# (so it is whatever zxbc really used, even with --org in the extra args
+# or the compiler's own default). For a prebuilt .bin there is no map:
+# set ORG to the address it was built for (default 0x1000).
 #
 # --shot runs cap32 with SDL_VIDEODRIVER=dummy and a small autocmd script
 # (load, delay, screenshot, exit) instead of opening an interactive
@@ -75,10 +82,20 @@ fi
 case "$EXT" in
     bas | BAS)
         echo "run.sh: compiling $SRC_ABS -> $BIN_ABS"
-        (cd "$REPO_ROOT" && "${ZXBC[@]}" --arch cpc --org 0x1000 -o "$BIN_ABS" "$SRC_ABS" "${EXTRA_ARGS[@]}")
+        MAP_ABS="$BUILD_DIR/$STEM.map"
+        ORG_ARGS=()
+        [[ -n "${ORG:-}" ]] && ORG_ARGS=(--org "$ORG")
+        (cd "$REPO_ROOT" && "${ZXBC[@]}" --arch cpc ${ORG_ARGS[@]+"${ORG_ARGS[@]}"} -M "$MAP_ABS" -o "$BIN_ABS" "$SRC_ABS" "${EXTRA_ARGS[@]}")
+        START_HEX="$(sed -n 's/^\([0-9A-Fa-f]*\): \.core\.__START_PROGRAM$/\1/p' "$MAP_ABS" | head -n1)"
+        if [[ -z "$START_HEX" ]]; then
+            echo "run.sh: error: no .core.__START_PROGRAM in $MAP_ABS; cannot tell the origin" >&2
+            exit 1
+        fi
+        LOAD_ADDR="0x$START_HEX"
         ;;
     bin | BIN)
         cp "$SRC_ABS" "$BIN_ABS"
+        LOAD_ADDR="${ORG:-0x1000}"
         ;;
     *)
         echo "run.sh: error: expected a .bas or .bin file, got $SRC" >&2
@@ -87,7 +104,7 @@ case "$EXT" in
 esac
 
 echo "run.sh: packaging $BIN_ABS -> $DSK_ABS"
-python3 "$MKDSK" -o "$DSK_ABS" --load 0x1000 --exec 0x1000 --name "$AMSDOS_STEM.BIN" "$BIN_ABS"
+python3 "$MKDSK" -o "$DSK_ABS" --load "$LOAD_ADDR" --exec "$LOAD_ADDR" --name "$AMSDOS_STEM.BIN" "$BIN_ABS"
 
 CAP32="${CAP32:-$REPO_ROOT/../caprice32/cap32}"
 

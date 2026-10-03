@@ -21,7 +21,9 @@ from .generic import _end
 #   $0000-$003F   firmware RST vectors (ROM/firmware; not part of our binary.
 #                 TODO(cpc): wire RST 6 ($0030) to FP_CALC_ENTRY once the FP
 #                 calculator is hooked up)
-#   $0040-$0FFF   unused (4 KB); ORG stays at $1000
+#   $0040-$0FFF   unused (4 KB); usable for code (--org 0x40 works: proven on
+#                 Caprice32 464/664/6128 and chips 464/6128). The default ORG
+#                 stays at $1000
 #   $1000 -> up   code + constant data (the compiled .bin); may run past $4000
 #   ...  -$9DFF   heap, top-aligned just below the private block (never
 #                 emitted as DEFS -- see emit_prologue)
@@ -53,6 +55,13 @@ class Backend(Z80Backend):
     # a heap is in use (see the memory map above). Checked by zxbc's
     # generic post-assembly memory-layout check.
     MAX_CODE_ADDRESS = _PRIV_BASE
+
+    # Code must start at or above $0040: $0000-$003F are the restarts (the
+    # firmware's, plus our RST 6 FP-calculator jump at $0030 and IM 1
+    # vector at $0038; the firmware's ISR calls the external-interrupt
+    # vector at $003B).
+    MIN_CODE_ADDRESS = 0x0040
+    MIN_CODE_REASON = "$0000-$003F hold the restarts and interrupt vectors"
 
     # Address ranges reserved only in programs that define the label
     # (checked by zxbc's memory-layout check). A library that wants the
