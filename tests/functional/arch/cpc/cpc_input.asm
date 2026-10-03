@@ -1,4 +1,4 @@
-	org 4096
+	org 64
 	.core.CPC_PRIV_BASE EQU 40448
 	.core.CPC_PRIV_SIZE EQU 1024
 	.core.CPC_STACK_TOP EQU 42496
@@ -39,7 +39,7 @@ _s:
 .core.__END_PROGRAM:
 	jp .core.__CPC_END
 _PRIVATEInputKey:
-#line 24 "src/lib/arch/cpc/stdlib/input.bas"
+#line 29 "src/lib/arch/cpc/stdlib/input.bas"
 		call .core.__FW_CALL
 		defw $BB81
 		call .core.__FW_CALL
@@ -48,8 +48,14 @@ _PRIVATEInputKey:
 		call .core.__FW_CALL
 		defw $BB84
 		pop af
-#line 34 "src/lib/arch/cpc/stdlib/input.bas"
+#line 39 "src/lib/arch/cpc/stdlib/input.bas"
 _PRIVATEInputKey__leave:
+	ret
+_PRIVATEInputFlush:
+#line 47 "src/lib/arch/cpc/stdlib/input.bas"
+		call .core.__CPC_FLUSH_KEYS
+#line 50 "src/lib/arch/cpc/stdlib/input.bas"
+_PRIVATEInputFlush__leave:
 	ret
 _input:
 	push ix
@@ -63,6 +69,7 @@ _input:
 	ld de, .LABEL.__LABEL0
 	ld bc, -3
 	call .core.__PSTORE_STR
+	call _PRIVATEInputFlush
 .LABEL.__LABEL1:
 	call _PRIVATEInputKey
 	ld (ix-1), a
@@ -282,7 +289,7 @@ _input__leave:
 	;
 	; zx48k's own sysvars.asm and the runtime files ported from it hard-code
 	; Spectrum sysvar addresses ($5C00-$5CB5), which are ordinary program RAM
-	; on the CPC (inside the code/data area, $1000 up); using them as-is would
+	; on the CPC (inside the code/data area, $0040 up); using them as-is would
 	; silently corrupt the compiled program. This file relocates them into the
 	; private runtime block instead ($9E00-$A1FF, 1 KB -- see
 	; .core.CPC_PRIV_BASE / CPC_PRIV_SIZE, emitted as EQUs by
@@ -917,7 +924,7 @@ __CPC_END:
 	    rst  0
 #line 202 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    pop namespace
-#line 235 "src/lib/arch/cpc/stdlib/input.bas"
+#line 252 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/cpc/runtime/chr.asm"
 	; CHR$(x, y, x) returns the string CHR$(x) + CHR$(y) + CHR$(z)
 	;
@@ -1407,7 +1414,7 @@ __CHR_END:
 	    ret
 	    ENDP
 	    pop namespace
-#line 236 "src/lib/arch/cpc/stdlib/input.bas"
+#line 253 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/zx48k/runtime/cmp/eq16.asm"
 	    push namespace core
 __EQ16:	; Test if 16bit values HL == DE
@@ -1418,7 +1425,7 @@ __EQ16:	; Test if 16bit values HL == DE
 	    inc a
 	    ret
 	    pop namespace
-#line 237 "src/lib/arch/cpc/stdlib/input.bas"
+#line 254 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/cpc/runtime/copy_attr.asm"
 	; Copies the permanent attribute (ATTR_P/MASK_P/FLAGS2/P_FLAG) into the
 	; temporary one (ATTR_T/MASK_T/...) at the start of every PRINT
@@ -1500,7 +1507,7 @@ __SAM_NOINV:
 	    ret
 	    ENDP
 	    pop namespace
-#line 238 "src/lib/arch/cpc/stdlib/input.bas"
+#line 255 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/zx48k/runtime/loadstr.asm"
 	; Loads a string (ptr) from HL
 	; and duplicates it on dynamic memory again
@@ -1538,7 +1545,7 @@ __LOADSTR:		; __FASTCALL__ entry
 	    pop hl	; Recovers destiny in hl as result
 	    ret
 	    pop namespace
-#line 240 "src/lib/arch/cpc/stdlib/input.bas"
+#line 257 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/zx48k/runtime/mem/free.asm"
 ; vim: ts=4:et:sw=4:
 	; Copyleft (K) by Jose M. Rodriguez de la Rosa
@@ -1697,7 +1704,7 @@ __MEM_BLOCK_JOIN:  ; Joins current block (pointed by HL) with next one (pointed 
 	    ret
 	    ENDP
 	    pop namespace
-#line 241 "src/lib/arch/cpc/stdlib/input.bas"
+#line 258 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/cpc/runtime/over.asm"
 	; Sets OVER flag in P_FLAG permanently
 ; Parameter: OVER flag in bit 0 of A register
@@ -1741,7 +1748,7 @@ OVER_TMP:
 	    jp __SET_ATTR_MODE
 	    ENDP
 	    pop namespace
-#line 242 "src/lib/arch/cpc/stdlib/input.bas"
+#line 259 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/cpc/runtime/print.asm"
 	; PRINT command routine
 	; Does not print attribute. Use PRINT_STR or PRINT_NUM for that
@@ -2550,7 +2557,7 @@ __PA_ERR:
 	    jp __STOP
 	    ENDP
 	    pop namespace
-#line 243 "src/lib/arch/cpc/stdlib/input.bas"
+#line 260 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/zx48k/runtime/printstr.asm"
 #line 1 "src/lib/arch/cpc/runtime/attr.asm"
 ; Phase-1 stub for zx48k/runtime/attr.asm (was: computing a Spectrum
@@ -2650,7 +2657,7 @@ __PRINT_STR:
 	    jp __PRINT_STR_LOOP
 	    ENDP
 	    pop namespace
-#line 244 "src/lib/arch/cpc/stdlib/input.bas"
+#line 261 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/zx48k/runtime/pstorestr.asm"
 ; vim:ts=4:et:sw=4
 	;
@@ -2913,7 +2920,7 @@ __PSTORE_STR:
 	    add hl, bc
 	    jp __STORE_STR
 	    pop namespace
-#line 245 "src/lib/arch/cpc/stdlib/input.bas"
+#line 262 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/zx48k/runtime/pstorestr2.asm"
 ; vim:ts=4:et:sw=4
 	;
@@ -2962,7 +2969,7 @@ __PSTORE_STR2:
 	    add hl, bc
 	    jp __STORE_STR2
 	    pop namespace
-#line 246 "src/lib/arch/cpc/stdlib/input.bas"
+#line 263 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/zx48k/runtime/strcat.asm"
 #line 1 "src/lib/arch/zx48k/runtime/strlen.asm"
 	; Returns len if a string
@@ -3075,7 +3082,7 @@ __STRCATEND:
 	    ret
 	    ENDP
 	    pop namespace
-#line 248 "src/lib/arch/cpc/stdlib/input.bas"
+#line 265 "src/lib/arch/cpc/stdlib/input.bas"
 #line 1 "src/lib/arch/zx48k/runtime/strslice.asm"
 	; String slicing library
 	; HL = Str pointer
@@ -3161,5 +3168,5 @@ __FREE_ON_EXIT:
 	    ret
 	    ENDP
 	    pop namespace
-#line 250 "src/lib/arch/cpc/stdlib/input.bas"
+#line 267 "src/lib/arch/cpc/stdlib/input.bas"
 	END

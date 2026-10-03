@@ -32,6 +32,8 @@ VAL_FREE_FLAG:  defb 0      ; 1 if the string must be freed when done
 VAL_NEG:        defb 0      ; 1 if the number is negative
 VAL_INFRAC:     defb 0      ; 1 once the decimal point has been seen
 VAL_DECIMALS:   defb 0      ; number of digits read after the decimal point
+VAL_EXP:        defb 0      ; magnitude of the exponent after an E (0-99)
+VAL_EXPNEG:     defb 0      ; 1 if the exponent is negative
 
 VAL:
     ; Input:  HL = address of a$ (2 bytes of length + data)
@@ -51,6 +53,14 @@ VAL:
     LOCAL VAL_EMPTY_SKIP
     LOCAL VAL_NO_FREE
     LOCAL PUSH_DIGIT
+    LOCAL VAL_EXPO
+    LOCAL VAL_EXSIGN
+    LOCAL VAL_EXLOOP
+    LOCAL VAL_EXNEXT
+    LOCAL VAL_EXFIN
+    LOCAL VAL_EXPOS
+    LOCAL VAL_MUL_LOOP
+    LOCAL VAL_DIVN
 
     ld   (VAL_FREE_FLAG), a
     ld   a, h
@@ -70,6 +80,8 @@ VAL:
     ld   (VAL_NEG), a
     ld   (VAL_INFRAC), a
     ld   (VAL_DECIMALS), a
+    ld   (VAL_EXP), a
+    ld   (VAL_EXPNEG), a
 
     ld   hl, (VAL_LEN)
     ld   a, h
@@ -113,6 +125,10 @@ VAL_LOOP:
     jr   VAL_DIGIT_ADVANCE  ; the point doesn't count as a digit, just advance
 
 VAL_NOT_DOT:
+    cp   'E'
+    jr   z, VAL_EXPO
+    cp   'e'
+    jr   z, VAL_EXPO
     cp   '0'
     jp   c, VAL_DONE
     cp   '9' + 1
@@ -149,10 +165,76 @@ VAL_DIGIT_ADVANCE:
     ld   (VAL_LEN), hl
     jp   VAL_LOOP
 
+VAL_EXPO:
+    ; E[+|-]dd: exponent of 10 (two digits at most), then the parse ends
+    ld   hl, (VAL_PTR)
+    inc  hl
+    ld   de, (VAL_LEN)
+    dec  de
+    ld   a, d
+    or   e
+    jr   z, VAL_EXFIN
+    ld   a, (hl)
+    cp   '+'
+    jr   z, VAL_EXSIGN
+    cp   '-'
+    jr   nz, VAL_EXLOOP
+    ld   a, 1
+    ld   (VAL_EXPNEG), a
+VAL_EXSIGN:
+    inc  hl
+    dec  de
+VAL_EXLOOP:
+    ld   a, d
+    or   e
+    jr   z, VAL_EXFIN
+    ld   a, (hl)
+    sub  '0'
+    cp   10
+    jr   nc, VAL_EXFIN
+    ld   b, a
+    ld   a, (VAL_EXP)
+    cp   10
+    jr   nc, VAL_EXNEXT     ; more than two digits: ignore the rest
+    ld   c, a
+    add  a, a
+    add  a, a
+    add  a, c
+    add  a, a
+    add  a, b
+    ld   (VAL_EXP), a
+VAL_EXNEXT:
+    inc  hl
+    dec  de
+    jr   VAL_EXLOOP
+VAL_EXFIN:
+    ; fall into VAL_DONE (the rest of the text is ignored)
+
 VAL_DONE:
-    ld   a, (VAL_DECIMALS)
+    ; net power of ten = +-exponent - decimals
+    ld   a, (VAL_EXPNEG)
     or   a
+    ld   a, (VAL_EXP)
+    jr   z, VAL_EXPOS
+    neg
+VAL_EXPOS:
+    ld   hl, VAL_DECIMALS
+    sub  (hl)
     jr   z, VAL_NOT_NEG
+    jp   m, VAL_DIVN
+    ld   b, a
+VAL_MUL_LOOP:
+    push bc
+    ld   a, 10
+    call PUSH_DIGIT
+    rst  30h
+    defb $04                ;;multiply
+    defb $38                ;;end-calc
+    pop  bc
+    djnz VAL_MUL_LOOP
+    jr   VAL_NOT_NEG
+VAL_DIVN:
+    neg
     ld   b, a
 VAL_DIV_LOOP:
     push bc

@@ -21,10 +21,11 @@ from .generic import _end
 #   $0000-$003F   firmware RST vectors (ROM/firmware; not part of our binary.
 #                 TODO(cpc): wire RST 6 ($0030) to FP_CALC_ENTRY once the FP
 #                 calculator is hooked up)
-#   $0040-$0FFF   unused (4 KB); usable for code (--org 0x40 works: proven on
-#                 Caprice32 464/664/6128 and chips 464/6128). The default ORG
-#                 stays at $1000
-#   $1000 -> up   code + constant data (the compiled .bin); may run past $4000
+#   $0040 -> up   code + constant data (the compiled .bin); may run past
+#                 $4000. $0040 is the lowest safe origin (proven on Caprice32
+#                 464/664/6128 and chips 464/6128); BASIC's CALL writes
+#                 $0040-$0047, so a tool that enters via CALL needs a stub.
+#                 RUN"file is fine. --org accepts any value >= $0040
 #   ...  -$9DFF   heap, top-aligned just below the private block (never
 #                 emitted as DEFS -- see emit_prologue)
 #   $9E00-$A1FF   private runtime block (1 KB): relocated sysvars, future
@@ -40,7 +41,7 @@ from .generic import _end
 # them as asm EQUs (.core.CPC_PRIV_BASE etc.) so runtime .asm files never
 # need to duplicate them either.
 
-_ORG = 0x1000  # default code origin
+_ORG = 0x0040  # default code origin
 
 _PRIV_BASE = 0x9E00  # private runtime block: relocated sysvars, Phase 2 state
 _PRIV_SIZE = 0x400  # 1 KB ($9E00-$A1FF)
@@ -127,7 +128,7 @@ class Backend(Z80Backend):
         """Program prologue for the Amstrad CPC.
 
         Structure of the generated binary:
-          org {OPTIONS.org}          (default $1000)
+          org {OPTIONS.org}          (default $0040)
           .core.CPC_* EQUs           (memory-map constants for runtime asm)
           {START_LABEL}:
             di                      ; off until the bootstrap has put in

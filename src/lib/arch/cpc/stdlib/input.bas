@@ -7,6 +7,11 @@
 ' firmware's own text cursor shows where typing goes. DEL deletes the
 ' last character, RETURN ends the input. As in zx48k's version, the
 ' typed text is erased from the screen when RETURN is pressed.
+'
+' The firmware's key buffer fills in the background, also while the
+' program polls INKEY$ (which scans the keyboard itself). input()
+' therefore empties the buffer when it starts, so keys typed earlier
+' don't leak into the line.
 ' ----------------------------------------------------------------
 
 #ifndef __LIBRARY_INPUT__
@@ -33,12 +38,24 @@ FUNCTION FASTCALL PRIVATEInputKey AS UBYTE
     END ASM
 END FUNCTION
 
+' ------------------------------------------------------------------
+' Function 'PRIVATE' to this module.
+' Discards every character waiting in the firmware's key buffer
+' (runtime bootstrap.asm: KM_READ_CHAR, &BB09, until none).
+' ------------------------------------------------------------------
+SUB FASTCALL PRIVATEInputFlush()
+    ASM
+    call .core.__CPC_FLUSH_KEYS
+    END ASM
+END SUB
+
 FUNCTION input(MaxLen AS UINTEGER) AS STRING
     DIM result$ AS STRING
     DIM i AS UINTEGER
     DIM k AS UBYTE
 
     result$ = ""
+    PRIVATEInputFlush()
 
     DO
         k = PRIVATEInputKey()

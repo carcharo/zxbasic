@@ -22,7 +22,7 @@
 # AMSDOS load/exec address is read back from the memory map zxbc writes
 # (so it is whatever zxbc really used, even with --org in the extra args
 # or the compiler's own default). For a prebuilt .bin there is no map:
-# set ORG to the address it was built for (default 0x1000).
+# set ORG to the address it was built for (default 0x40).
 #
 # --shot runs cap32 with SDL_VIDEODRIVER=dummy and a small autocmd script
 # (load, delay, screenshot, exit) instead of opening an interactive
@@ -95,7 +95,7 @@ case "$EXT" in
         ;;
     bin | BIN)
         cp "$SRC_ABS" "$BIN_ABS"
-        LOAD_ADDR="${ORG:-0x1000}"
+        LOAD_ADDR="${ORG:-0x40}"
         ;;
     *)
         echo "run.sh: error: expected a .bas or .bin file, got $SRC" >&2

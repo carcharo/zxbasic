@@ -17,8 +17,9 @@
 ' write it in asm (an ASM block with a label, @label for its address).
 '
 ' In game mode, while the program isn't inside a firmware call, the
-' firmware's own interrupt work stops: its key buffer (INKEY$; use
-' ScanKeys from cpcbuild), its 300 Hz clock (use Frames()), its sound
+' firmware's own interrupt work stops: its key buffer (INPUT; INKEY$
+' scans the keyboard itself and keeps working, ScanKeys from cpcbuild
+' reads more keys), its 300 Hz clock (use Frames()), its sound
 ' queue (BEEP, SoundQueue; use the music player) and its ink refresh.
 ' Firmware calls themselves still work. Switch it off (GameMode(0))
 ' before relying on those again.

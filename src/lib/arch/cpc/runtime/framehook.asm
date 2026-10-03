@@ -7,7 +7,7 @@
 ; Normal mode: the routine runs from a firmware frame-flyback event
 ; (KL_NEW_FRAME_FLY &BCD7) registered at start-up: class &80
 ; (asynchronous, FAR address) with ROM select &FF, so both ROMs are off
-; while it runs and it can live anywhere, program code at &1000+
+; while it runs and it can live anywhere, program code at &0040+
 ; included. The event block (FH_BLOCK) is in the private block, in the
 ; central 32K as the firmware requires. Measured (Caprice32 and chips,
 ; 464 and 6128): it runs exactly once per frame, also while the program

@@ -9,8 +9,10 @@
 ; 6 ticks per frame. The count only advances while interrupts run, which
 ; is inside gate calls, so the loop keeps calling the firmware and no
 ; tick is missed. A key that ends the pause is put back in the key
-; buffer (KM_CHAR_RETURN), so a following INKEY$ sees it, like the
-; Spectrum, where the key is still held down.
+; buffer (KM_CHAR_RETURN). INKEY$ reads the key currently held, so it
+; sees the key anyway while it stays down; the put-back only matters
+; to a following INKEY$ when built with -D CPC_INKEY_BUFFERED (which
+; reads the buffer).
 ;
 ; Parameter: frames in HL.
 ; Firmware entries called (via the gate): KM_READ_CHAR (&BB09),

@@ -1,4 +1,4 @@
-	org 4096
+	org 64
 	.core.CPC_PRIV_BASE EQU 40448
 	.core.CPC_PRIV_SIZE EQU 1024
 	.core.CPC_STACK_TOP EQU 42496
@@ -45,35 +45,35 @@ _cnt:
 .core.__END_PROGRAM:
 	jp .core.__CPC_END
 _FrameHook:
-#line 40 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 41 "src/lib/arch/cpc/stdlib/framehook.bas"
 		ld (.core.FH_ADDR), hl
-#line 43 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 44 "src/lib/arch/cpc/stdlib/framehook.bas"
 _FrameHook__leave:
 	ret
 _FrameHookOff:
-#line 46 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 47 "src/lib/arch/cpc/stdlib/framehook.bas"
 		ld hl, 0
 		ld (.core.FH_ADDR), hl
-#line 50 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 51 "src/lib/arch/cpc/stdlib/framehook.bas"
 _FrameHookOff__leave:
 	ret
 _Frames:
-#line 53 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 54 "src/lib/arch/cpc/stdlib/framehook.bas"
 		di
 		ld hl, (.core.FH_FRAMES)
 		ld de, (.core.FH_FRAMES + 2)
 		ei
-#line 59 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 60 "src/lib/arch/cpc/stdlib/framehook.bas"
 _Frames__leave:
 	ret
 _GameMode:
-#line 62 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 63 "src/lib/arch/cpc/stdlib/framehook.bas"
 		ld hl, 0
 		or a
 		jr z, $ + 5
 		ld hl, .core.__CPC_GM_ISR
 		ld (.core.GM_VEC), hl
-#line 69 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 70 "src/lib/arch/cpc/stdlib/framehook.bas"
 _GameMode__leave:
 	ret
 	;; --- end of user code ---
@@ -111,7 +111,7 @@ _GameMode__leave:
 	;
 	; zx48k's own sysvars.asm and the runtime files ported from it hard-code
 	; Spectrum sysvar addresses ($5C00-$5CB5), which are ordinary program RAM
-	; on the CPC (inside the code/data area, $1000 up); using them as-is would
+	; on the CPC (inside the code/data area, $0040 up); using them as-is would
 	; silently corrupt the compiled program. This file relocates them into the
 	; private runtime block instead ($9E00-$A1FF, 1 KB -- see
 	; .core.CPC_PRIV_BASE / CPC_PRIV_SIZE, emitted as EQUs by
@@ -746,7 +746,7 @@ __CPC_END:
 	    rst  0
 #line 202 "src/lib/arch/cpc/runtime/bootstrap.asm"
 	    pop namespace
-#line 74 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 75 "src/lib/arch/cpc/stdlib/framehook.bas"
 #line 1 "src/lib/arch/cpc/runtime/framehook.asm"
 	; -----------------------------------------------------------------------
 	; Amstrad CPC frame hook and game mode (stdlib/framehook.bas)
@@ -757,7 +757,7 @@ __CPC_END:
 ; Normal mode: the routine runs from a firmware frame-flyback event
 ; (KL_NEW_FRAME_FLY &BCD7) registered at start-up: class &80
 	; (asynchronous, FAR address) with ROM select &FF, so both ROMs are off
-	; while it runs and it can live anywhere, program code at &1000+
+	; while it runs and it can live anywhere, program code at &0040+
 	; included. The event block (FH_BLOCK) is in the private block, in the
 	; central 32K as the firmware requires. Measured (Caprice32 and chips,
 ; 464 and 6128): it runs exactly once per frame, also while the program
@@ -881,5 +881,5 @@ __GM_DONE:
 	    ret
 	    ENDP
 	    pop namespace
-#line 75 "src/lib/arch/cpc/stdlib/framehook.bas"
+#line 76 "src/lib/arch/cpc/stdlib/framehook.bas"
 	END

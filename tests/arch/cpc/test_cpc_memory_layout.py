@@ -64,7 +64,7 @@ def _reset_global_state():
 
 
 def test_cpc_default_layout_fits(tmp_path):
-    """A small program compiled with cpc's defaults (org 0x1000, heap
+    """A small program compiled with cpc's defaults (org 0x40, heap
     top-aligned just below the private block) must compile cleanly."""
     bas = _write(tmp_path, "fits.bas", _FITS_PROGRAM)
     out = os.path.join(tmp_path, "fits.bin")

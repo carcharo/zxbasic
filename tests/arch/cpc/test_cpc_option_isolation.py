@@ -26,5 +26,5 @@ def _org_of(tmp_path, arch: str) -> str:
 
 @pytest.mark.parametrize("next_arch", ["zx48k", "zxnext"])
 def test_cpc_org_does_not_leak(tmp_path, next_arch):
-    assert _org_of(tmp_path, "cpc") == "org 4096"
+    assert _org_of(tmp_path, "cpc") == "org 64"
     assert _org_of(tmp_path, next_arch) == "org 32768"

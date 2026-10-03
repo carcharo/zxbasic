@@ -1,4 +1,4 @@
-	org 4096
+	org 64
 	.core.CPC_PRIV_BASE EQU 40448
 	.core.CPC_PRIV_SIZE EQU 1024
 	.core.CPC_STACK_TOP EQU 42496
@@ -1692,7 +1692,7 @@ _Play.SetChipMixer__leave:
 	;
 	; zx48k's own sysvars.asm and the runtime files ported from it hard-code
 	; Spectrum sysvar addresses ($5C00-$5CB5), which are ordinary program RAM
-	; on the CPC (inside the code/data area, $1000 up); using them as-is would
+	; on the CPC (inside the code/data area, $0040 up); using them as-is would
 	; silently corrupt the compiled program. This file relocates them into the
 	; private runtime block instead ($9E00-$A1FF, 1 KB -- see
 	; .core.CPC_PRIV_BASE / CPC_PRIV_SIZE, emitted as EQUs by
@@ -4645,7 +4645,7 @@ __MUL8B:
 ; Amstrad CPC override: only change from zx48k's version is LBOUND_PTR's
 	; storage address. zx48k uses the Spectrum ROM's MEMBOT sysvar; on the
 	; CPC that address falls inside ordinary program RAM (the compiled .bin
-	; starts at $1000), so ARRAY_SCRATCH (sysvars.asm) is a dedicated 8-byte
+	; starts at $0040), so ARRAY_SCRATCH (sysvars.asm) is a dedicated 8-byte
 	; scratch area in the private runtime block instead (same fix zx81sd's
 	; own array/array.asm applies).
 #line 1 "src/lib/arch/zx48k/runtime/arith/fmul16.asm"

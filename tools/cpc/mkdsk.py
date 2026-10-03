@@ -118,10 +118,10 @@ Formats implemented, and where they were verified:
   increasing EX (0, 1, 2, ...); only the last one has a partial RC.
 
 Usage:
-    python tools/cpc/mkdsk.py -o out.dsk [--load 0x1000] [--exec 0x1000] \\
+    python tools/cpc/mkdsk.py -o out.dsk [--load 0x40] [--exec 0x40] \\
         [--name PROG.BIN] input.bin [more.bin ...]
 
-Addresses accept 0x1000, &1000 or $1000 notation (or plain decimal).
+Addresses accept 0x40, &40 or $40 notation (or plain decimal).
 """
 
 from __future__ import annotations
@@ -394,7 +394,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("inputs", metavar="input.bin", nargs="+", help="Raw binary file(s) to add to the disk")
     parser.add_argument("-o", "--output", required=True, help="Output .dsk file")
     parser.add_argument(
-        "--load", type=parse_int, default=0x1000, help="Load address (default 0x1000). Accepts 0x, & or $ hex"
+        "--load", type=parse_int, default=0x40, help="Load address (default 0x40). Accepts 0x, & or $ hex"
     )
     parser.add_argument(
         "--exec", dest="exec_addr", type=parse_int, default=None, help="Exec/entry address (default: same as --load)"

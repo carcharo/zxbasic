@@ -18,11 +18,11 @@ This page describes the target architecture and the compiler features.
 
 ```sh
 zxbc --arch cpc -o prog.bin prog.bas
-python3 tools/cpc/mkdsk.py -o prog.dsk --load 0x1000 --exec 0x1000 --name PROG.BIN prog.bin
+python3 tools/cpc/mkdsk.py -o prog.dsk --load 0x40 --exec 0x40 --name PROG.BIN prog.bin
 ```
 
-The output is a flat binary that expects to be loaded and started at &1000
-(`--org`, default 4096). `-f bin` is the format to use; the `.tap`, `.tzx`,
+The output is a flat binary that expects to be loaded and started at &0040
+(`--org`, default 64). `-f bin` is the format to use; the `.tap`, `.tzx`,
 `.sna` and `.z80` outputs are Spectrum formats and mean nothing here.
 `tools/cpc/mkdsk.py` (pure Python, standard library only) prepends the 128-byte
 AMSDOS header and writes a standard CPCEMU `.dsk` in AMSDOS data format. On the
@@ -54,7 +54,7 @@ truncated to eight characters.
 
 | Option | Effect on cpc |
 |---|---|
-| `-S`, `--org` | Start address. Default &1000. Must match `--load`/`--exec` given to `mkdsk.py`. |
+| `-S`, `--org` | Start address. Default &0040 (the lowest safe origin; any value from &0040 up). Must match `--load`/`--exec` given to `mkdsk.py`. |
 | `-H`, `--heap-size` | Heap size in bytes (default 4768). |
 | `--heap-address` | Heap address. Default: just below the private block, `&9E00 - heap size`. |
 | `--enable-break` | Check for ESC (key 66) at every line. See "Input". Not supported together with the Play library. |
@@ -75,8 +75,7 @@ in an emulator.
 | Range | Use |
 |---|---|
 | &0000-&003F | Firmware restart vectors. The runtime writes only &0030 (RST 6, the floating-point calculator entry) and &0038 (the interrupt front-end). |
-| &0040-&0FFF | Unused. |
-| &1000 up | Code and constant data (the `.bin`). May run past &4000. |
+| &0040 up | Code and constant data (the `.bin`). May run past &4000. |
 | up to &9DFF | Heap, top-aligned below the private block (default start &8B60). Not part of the binary. |
 | &9E00-&A1FF | Private runtime block (1 KB): relocated system variables, firmware gate state, floating-point workspace, library state, sound block. |
 | &A200-&A5FF | Stack (1 KB). SP starts at &A600. Below it is the private block, and there is no overflow check. |
@@ -89,7 +88,7 @@ The compiled code and data must end below &9E00, and below the heap if the
 program uses one; `zxbc` stops with an error when they do not
 (`compiled code+data ends at 0x....`, `past this architecture's memory limit of
 0x9E00`, or a heap overlap error). With the default heap that leaves about
-30.8 KB (&1000-&8B5F) for code and data.
+34.8 KB (&0040-&8B5F) for code and data.
 
 The constants are in one place, `src/arch/cpc/backend/main.py`, and the
 prologue emits them as `.core.CPC_PRIV_BASE`, `CPC_PRIV_SIZE`, `CPC_STACK_TOP`
@@ -97,7 +96,7 @@ and `CPC_MEM_TOP`.
 
 **Reserved &4000-&7FFF.** A program that defines the label
 `.core.__CPC_RESERVE_4000` (a library with a second screen buffer does, for example)
-makes the compiler reserve &4000-&7FFF. Code and data must then fit in &1000-&3FFF (12 KB)
+makes the compiler reserve &4000-&7FFF. Code and data must then fit in &0040-&3FFF (about 16 KB)
 and the heap must lie above &7FFF, or the build fails with `compiled code+data ... overlaps
 0x4000-0x7FFF, reserved because the program uses a library that reserves it`. Other programs are
 unaffected. Backends declare such ranges with `RESERVED_RANGE_LABELS`, checked in
@@ -168,7 +167,7 @@ live anywhere in the program.
 Game mode makes interrupts outside firmware calls skip the firmware's handler:
 the interrupt load drops from about 14.5 % to about 3.3 % of the CPU (busy-loop
 measurement). While in game mode and not inside a firmware call, the
-firmware's key buffer (INKEY$), its 300 Hz clock, its sound queue (BEEP,
+firmware's key buffer (INPUT; INKEY$ only under `-D CPC_INKEY_BUFFERED`), its 300 Hz clock, its sound queue (BEEP,
 `SoundQueue`) and its ink refresh stop; firmware calls themselves still work.
 Use a direct keyboard scan, `Frames()` and the hook instead. A music player
 that writes the AY directly can run on this hook.
@@ -194,7 +193,7 @@ that writes the AY directly can run on this hook.
 6. Firmware event routines (KL_NEW_FRAME_FLY and the like), and any block or
    table the firmware reads through a pointer, must be in &4000-&BFFF. Event
    routines are called with the lower ROM on, so they cannot live in
-   program code at &1000-&3FFF.
+   program code at &0040-&3FFF.
 7. Do not write to &0030 or &0038.
 
 **END.** `RUN"` never returns to BASIC, so there is nothing to return to. END
@@ -294,20 +293,47 @@ screen or system variable addresses.
 
 ## Input
 
-`INKEY$` reads the firmware's key buffer (`KM_READ_CHAR`): the CPC's own
-buffered model, like Locomotive BASIC. A key pressed once is returned once, and
-a held key repeats at the firmware's repeat rate. This differs from the
-Spectrum, where INKEY$ returns the key held now. The codes are the CPC's:
-RETURN 13, DEL 127, cursor keys 240-243 (up, down, left, right). The key buffer
-is emptied at start-up so the RETURN that started the program is not seen.
-Because interrupts are always on, the buffer fills during compiled code.
+`INKEY$` returns the key held down right now, as on the Spectrum, or "" if
+none. It scans the keyboard matrix directly (interrupts off for a moment, no
+firmware call) and turns the key into a character with the firmware's own key
+translation tables, so the machine's layout is respected: SHIFT gives the shifted
+character, CONTROL the control character (CONTROL wins if both are held), the
+firmware's shift lock counts as SHIFT held and its caps lock turns a-z into
+A-Z. A held key is returned by every call (no auto-repeat). SHIFT and CONTROL
+are not keys, the joystick is ignored, and if several keys are held the first in
+matrix order (cursor up, right, down first...) that gives a character is
+returned. Keys that give no character (the lock keys, an expansion token with no
+string) are skipped. Codes are the CPC's: RETURN 13, DEL 127, ESC 252, COPY 224,
+cursor keys 240-243 (up, down, left, right), the keypad as digits (the first
+character of its expansion string). Because the scan does not use the firmware's
+key buffer, it also works in game mode.
+
+`-D CPC_INKEY_BUFFERED` selects the old model instead: INKEY$ reads the firmware's
+key buffer (`KM_READ_CHAR`) like Locomotive BASIC, so a key pressed once is
+returned once and a held key repeats at the firmware's rate. The key buffer is
+emptied at start-up so the RETURN that started the program is not seen.
+
+The firmware's key buffer still fills in the background while a program polls
+INKEY$.
+
+`keys.bas` is the CPC version of zx48k's library with the same API (`GetKey`,
+`MultiKeys`, `GetKeyScanCode`) and the same `KEY*` constant names, so Spectrum
+code using it compiles unchanged. The scan codes encode the CPC matrix (high byte
+row 0-9, low byte bit mask), so use the names, not the numbers. KEYCAPS is SHIFT
+and KEYSYMBOL is CONTROL (KEYSHIFT and KEYCONTROL are aliases), KEYENTER is
+RETURN. CPC-only constants cover the cursor keys, COPY, CLR, DEL, TAB, ESC, CAPS
+LOCK, the keypad, the punctuation keys and joystick 0 (`KEYCURUP`, `KEYESC`,
+`KEYJOYFIRE1`...; see the file header). `MultiKeys` and `GetKeyScanCode` scan the
+matrix directly, with no dependency on cpcbuild.
 
 `INPUT(maxchars)` from `input.bas` is a function, as in zx48k:
 `a$ = INPUT(20)`. It reads with the firmware, shows the firmware's cursor,
-handles DEL and RETURN, and erases the typed text when RETURN is pressed.
+handles DEL and RETURN, and erases the typed text when RETURN is pressed. It
+empties the firmware's key buffer first, so keys typed earlier do not leak in.
 
 `PAUSE n` waits n frames (1/50 s) or until a key is pressed; `PAUSE 0` waits for
-a key. The key that ends a pause is put back in the buffer for INKEY$.
+a key. The key that ends a pause is put back in the firmware's key buffer
+(visible to the buffered INKEY$ and INPUT).
 
 With `--enable-break`, ESC (key 66) raises the break error. It is seen within a
 few loop iterations.
@@ -370,21 +396,23 @@ belongs to the firmware.
   (Measured before interrupts were always on; add about 12 %.) Integer and
   fixed-point code is 12 to 52 times faster than Locomotive, so use those
   for anything that must be quick.
-* **Text format.** PRINT and STR$ of a FLOAT print the sign, the integer part and
-  up to five decimals, rounded half away from zero, with trailing zeros removed.
-  There is no exponent notation: very large numbers print as long digit
-  strings, and very small ones print as 0 once they round below five decimals.
-  A constant expression folded by the compiler (`STR$(SIN(PI/6))`) keeps full
-  precision and can differ from the same expression evaluated at run time.
+* **Text format.** PRINT and STR$ of a FLOAT print exactly what the Spectrum
+  ROM prints: up to eight significant digits, rounded, trailing zeros removed.
+  Numbers from 1E-5 up to 99999999 use fixed notation (`0.5`, `.03`,
+  `12345678`); anything else uses exponent notation (`1E+8`, `1.2345679E+9`,
+  `1.5E-10`). A constant expression folded by the compiler (`STR$(SIN(PI/6))`)
+  keeps full precision and can differ from the same expression evaluated at
+  run time (this is the compiler's behaviour on every target).
 * **VAL** accepts one numeric literal (sign, digits, optional decimal point and
-  digits) and stops at the first other character. It does not evaluate
-  expressions: `VAL("2+2")` does not work.
+  digits, optional `E`, sign and up to two exponent digits, so it reads back
+  what STR$ prints) and stops at the first other character. It does not
+  evaluate expressions: `VAL("2+2")` does not work.
 
 ## Differences from zx48k
 
 | Area | zx48k | cpc |
 |---|---|---|
-| Default ORG | 32768 | 4096 (&1000) |
+| Default ORG | 32768 | 64 (&0040) |
 | Heap | 4768 bytes after the code, in the binary | 4768 bytes just below &9E00, not in the binary |
 | Output | `.bin`, `.tap`, `.tzx`, `.sna`, `.z80` | `.bin`; package with `tools/cpc/mkdsk.py` |
 | Program exit | Returns to BASIC | Waits for a key, then resets |
@@ -399,10 +427,10 @@ belongs to the firmware.
 | `print42.bas`, `print64.bas`, `sinclair.bas` | Work | Compile error |
 | POINT | 0 or 1 | The pixel's pen |
 | SCREEN$ | Ignores colours | Colour-sensitive (see above) |
-| INKEY$ | Key held now | Buffered key codes |
+| INKEY$ | Key held now | Key held now, CPC codes (`-D CPC_INKEY_BUFFERED`: buffered) |
 | BEEP | ULA, blocks, interrupts off | AY through the firmware, blocks, interrupts on |
 | Interrupts | Spectrum's IM 1 | Firmware's 300 Hz handler, always on |
-| Float text | PRINT-FP, with exponent | Fixed, 5 decimals, no exponent |
+| Float text | PRINT-FP | Same text as the ROM |
 | VAL | Evaluates expressions | One numeric literal |
 | LOAD, SAVE | Tape | Not implemented |
 | UDG table | Always present, copies of A-U | Only with `USR "a"`, CPC glyphs |

@@ -33,10 +33,10 @@ _NO_DBUF = """
 PRINT 1
 """
 
-# about 13 KB of padding: pushes the code past &4000
+# about 16 KB of padding: pushes the code past &4000
 _BIG = """
 ASM
-defs 13000
+defs 16000
 END ASM
 """
 

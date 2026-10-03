@@ -3,7 +3,7 @@
 ;
 ; zx48k's own sysvars.asm and the runtime files ported from it hard-code
 ; Spectrum sysvar addresses ($5C00-$5CB5), which are ordinary program RAM
-; on the CPC (inside the code/data area, $1000 up); using them as-is would
+; on the CPC (inside the code/data area, $0040 up); using them as-is would
 ; silently corrupt the compiled program. This file relocates them into the
 ; private runtime block instead ($9E00-$A1FF, 1 KB -- see
 ; .core.CPC_PRIV_BASE / CPC_PRIV_SIZE, emitted as EQUs by

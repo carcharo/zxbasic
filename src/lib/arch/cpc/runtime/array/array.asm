@@ -18,7 +18,7 @@
 ; Amstrad CPC override: only change from zx48k's version is LBOUND_PTR's
 ; storage address. zx48k uses the Spectrum ROM's MEMBOT sysvar; on the
 ; CPC that address falls inside ordinary program RAM (the compiled .bin
-; starts at $1000), so ARRAY_SCRATCH (sysvars.asm) is a dedicated 8-byte
+; starts at $0040), so ARRAY_SCRATCH (sysvars.asm) is a dedicated 8-byte
 ; scratch area in the private runtime block instead (same fix zx81sd's
 ; own array/array.asm applies).
 
