@@ -294,6 +294,22 @@ BT_MP               EQU SYSVAR_BASE + $106  ; DB -- mode 2: paper mask
 	BT_TRAMP            EQU SYSVAR_BASE + $120  ; 32B -- font copy routine (runs with the lower ROM in)
 	BT_PIX              EQU SYSVAR_BASE + $140  ; 64B -- SCREEN$ cell pixels (pen numbers)
 	BT_TBL              EQU SYSVAR_BASE + $200  ; 16B, page aligned -- screen byte per glyph-bit group
+; --- cpcbuild's cpcplus library (Phase 7 P3), both modes: $300-$37F. The
+	; ASIC register page replaces RAM at &4000-&7FFF while it is paged in, so the
+	; code that pages it in (page in, copy, page out) cannot live in the
+	; program, which may reach into that range; the library copies its small
+	; routines here at start-up (#init, lib/cpcplus/plus.asm) and bounces data
+	; through PL_BUF. Free in both memory maps (the firmware layout's $9E00 block
+	; and the bare layout's $BC00 block have no other users above $F3 / $21F).
+; Free elsewhere: $F3-$FF, $220-$2FF and $380-$3FF in bare mode ($F3-$2FF
+	; and $380-$3FF in firmware mode).
+; CPC_EXIT_VEC (bare mode only, $1F0-$1F1): a routine __CPC_RESET calls
+	; before it resets the machine (END), 0 = none. A library that leaves
+; hardware state behind (cpcplus's raster interrupts: PRI stops the
+	; firmware's six interrupts per frame) points it at its cleanup.
+	CPC_EXIT_VEC        EQU SYSVAR_BASE + $1F0  ; DW -- cleanup routine called by END's reset (bare mode), 0 = none
+	PL_TRAMP            EQU SYSVAR_BASE + $300  ; 64B -- paged-access routines (plus.asm copies them here)
+	PL_BUF              EQU SYSVAR_BASE + $340  ; 64B -- bounce buffer for data between the ASIC page and RAM at &4000-&7FFF
 	CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
@@ -770,6 +786,10 @@ __CPC_END:
 	; (ATTR_T bits 0-2, through colour.asm's pen map) is the graphics pen,
 	; or the paper under INVERSE 1. OVER 1 selects the firmware's XOR write
 	; mode (notes.md question 5).
+; Bare-metal mode (-D CPC_BAREMETAL): gfxbare.asm has __GRA_PREP (the pen
+	; and write mode as bytes for the pixel writer) and the pixel routines; the
+	; firmware's graphics VDU is not used, so there is no __GRA_XY.
+#line 26 "src/lib/arch/cpc/runtime/gfx.asm"
 	    push namespace core
 	; __GRA_PREP -- gives the firmware the graphics pen and write mode the
 	; temporary attributes ask for. Each is cached (GRA_PEN_CUR,
@@ -841,6 +861,7 @@ __GX_LOOP:
 	    ret
 	    ENDP
 	    pop namespace
+#line 105 "src/lib/arch/cpc/runtime/gfx.asm"
 #line 23 "src/lib/arch/cpc/runtime/circle.asm"
 	    push namespace core
 	CIRC_CX     EQU CIRC_VARS + 0       ; centre x
@@ -971,9 +992,11 @@ __CIRC_PT:
 	    ld   bc, (CIRC_CX)
 	    add  hl, bc
 	    ex   de, hl             ; DE = x, HL = y
+#line 172 "src/lib/arch/cpc/runtime/circle.asm"
 	    call __GRA_XY
 	    call .core.__FW_CALL
 	    defw $BBEA              ; GRA_PLOT_ABSOLUTE
+#line 176 "src/lib/arch/cpc/runtime/circle.asm"
 	    pop  hl
 	    pop  de
 	    ret
@@ -1093,6 +1116,7 @@ DRAW:
 	; (&BBEA) and GRA_MOVE_ABSOLUTE (&BBC0); plus __GRA_PREP's.
 ; Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF' (the
 	; gate).
+#line 38 "src/lib/arch/cpc/runtime/draw.asm"
 __DRAW:
 	    PROC
 	    LOCAL __DRAW_XOR
@@ -1132,6 +1156,7 @@ __DRAW_XOR:
     defw $BBC0              ; GRA_MOVE_ABSOLUTE: continue from the end
 	    ret
 	    ENDP
+#line 80 "src/lib/arch/cpc/runtime/draw.asm"
 	    pop namespace
 #line 28 "tests/functional/arch/cpc/cpc_graphics.bas"
 #line 1 "src/lib/arch/cpc/runtime/plot.asm"
@@ -1157,12 +1182,14 @@ PLOT:
 	; virtual), plus __GRA_PREP's.
 ; Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF' (the
 	; gate).
+#line 33 "src/lib/arch/cpc/runtime/plot.asm"
 __PLOT:
 	    call __GRA_PREP
 	    call __GRA_XY
 	    call .core.__FW_CALL
 	    defw $BBEA              ; GRA_PLOT_ABSOLUTE
 	    ret
+#line 40 "src/lib/arch/cpc/runtime/plot.asm"
 	    pop namespace
 #line 29 "tests/functional/arch/cpc/cpc_graphics.bas"
 	END

@@ -281,6 +281,22 @@ BT_MP               EQU SYSVAR_BASE + $106  ; DB -- mode 2: paper mask
 	BT_TRAMP            EQU SYSVAR_BASE + $120  ; 32B -- font copy routine (runs with the lower ROM in)
 	BT_PIX              EQU SYSVAR_BASE + $140  ; 64B -- SCREEN$ cell pixels (pen numbers)
 	BT_TBL              EQU SYSVAR_BASE + $200  ; 16B, page aligned -- screen byte per glyph-bit group
+; --- cpcbuild's cpcplus library (Phase 7 P3), both modes: $300-$37F. The
+	; ASIC register page replaces RAM at &4000-&7FFF while it is paged in, so the
+	; code that pages it in (page in, copy, page out) cannot live in the
+	; program, which may reach into that range; the library copies its small
+	; routines here at start-up (#init, lib/cpcplus/plus.asm) and bounces data
+	; through PL_BUF. Free in both memory maps (the firmware layout's $9E00 block
+	; and the bare layout's $BC00 block have no other users above $F3 / $21F).
+; Free elsewhere: $F3-$FF, $220-$2FF and $380-$3FF in bare mode ($F3-$2FF
+	; and $380-$3FF in firmware mode).
+; CPC_EXIT_VEC (bare mode only, $1F0-$1F1): a routine __CPC_RESET calls
+	; before it resets the machine (END), 0 = none. A library that leaves
+; hardware state behind (cpcplus's raster interrupts: PRI stops the
+	; firmware's six interrupts per frame) points it at its cleanup.
+	CPC_EXIT_VEC        EQU SYSVAR_BASE + $1F0  ; DW -- cleanup routine called by END's reset (bare mode), 0 = none
+	PL_TRAMP            EQU SYSVAR_BASE + $300  ; 64B -- paged-access routines (plus.asm copies them here)
+	PL_BUF              EQU SYSVAR_BASE + $340  ; 64B -- bounce buffer for data between the ASIC page and RAM at &4000-&7FFF
 	CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------

@@ -234,10 +234,21 @@ __BE_RESET:
 ; be fetched from the ROM. So the last three instructions are copied to
 ; the start of the private block (&BC00; nothing needs it any more) and
 ; run there.
+; The reset first calls the routine CPC_EXIT_VEC points at, if any (sysvars.asm: a
+; library's cleanup, with interrupts off).
 ; Registers clobbered: n/a (never returns).
 __CPC_RESET:
     PROC
-    LOCAL __BR_STUB, __BR_END
+    LOCAL __BR_STUB, __BR_END, __BR_NOEXIT
+    di
+    ld   hl, (CPC_EXIT_VEC) ; a library's cleanup (cpcplus raster interrupts)
+    ld   a, h
+    or   l
+    jr   z, __BR_NOEXIT
+    ld   de, __BR_NOEXIT
+    push de
+    jp   (hl)               ; returns to __BR_NOEXIT, interrupts still off
+__BR_NOEXIT:
     di
     ld   hl, __BR_STUB
     ld   de, .core.CPC_PRIV_BASE
