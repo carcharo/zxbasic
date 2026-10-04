@@ -603,8 +603,9 @@ BT_MP               EQU SYSVAR_BASE + $106  ; DB -- mode 2: paper mask
 	; routines here at start-up (#init, lib/cpcplus/plus.asm) and bounces data
 	; through PL_BUF. Free in both memory maps (the firmware layout's $9E00 block
 	; and the bare layout's $BC00 block have no other users above $F3 / $21F).
-; Free elsewhere: $F3-$FF, $220-$2FF and $380-$3FF in bare mode ($F3-$2FF
-	; and $380-$3FF in firmware mode).
+	; PL_TRAMP2 ($380-$3F5) holds the library's second routine block (the fast
+; paths for raster handlers). Free elsewhere: $F3-$FF, $220-$2FF and $3F6-$3FF
+	; in bare mode ($F3-$2FF and $3F6-$3FF in firmware mode).
 ; CPC_EXIT_VEC (bare mode only, $1F0-$1F1): a routine __CPC_RESET calls
 	; before it resets the machine (END), 0 = none. A library that leaves
 ; hardware state behind (cpcplus's raster interrupts: PRI stops the
@@ -612,6 +613,7 @@ BT_MP               EQU SYSVAR_BASE + $106  ; DB -- mode 2: paper mask
 	CPC_EXIT_VEC        EQU SYSVAR_BASE + $1F0  ; DW -- cleanup routine called by END's reset (bare mode), 0 = none
 	PL_TRAMP            EQU SYSVAR_BASE + $300  ; 64B -- paged-access routines (plus.asm copies them here)
 	PL_BUF              EQU SYSVAR_BASE + $340  ; 64B -- bounce buffer for data between the ASIC page and RAM at &4000-&7FFF
+	PL_TRAMP2           EQU SYSVAR_BASE + $380  ; 118B -- cpcplus fast-path routines (raster handlers; plus.asm copies them here)
 	CPC_SYSVARS_USED    EQU $F3                 ; bytes used above; compare by eye against
 	                                             ; .core.CPC_PRIV_SIZE when this table grows
 ; --- Screen constants (CPC mode 1: 40 columns x 25 rows) ----------------
