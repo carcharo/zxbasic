@@ -25,11 +25,17 @@ PLOT:
 ; virtual), plus __GRA_PREP's.
 ; Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF' (the
 ; gate).
+#ifdef CPC_BAREMETAL
+; Bare-metal mode: gfxbare.asm's __PLOT (DE = x, HL = y, mode pixels; moves
+; the graphics cursor, writes the pixel straight into screen memory).
+    jp   __PLOT
+#else
 __PLOT:
     call __GRA_PREP
     call __GRA_XY
     call .core.__FW_CALL
     defw $BBEA              ; GRA_PLOT_ABSOLUTE
     ret
+#endif
 
     pop namespace

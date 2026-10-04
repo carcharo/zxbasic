@@ -30,8 +30,18 @@
 ; Phase 4d), so a held ESC is seen at the first CHECK_BREAK after the
 ; firmware's next keyboard scan (every 20 ms).
 
+; Bare-metal mode (-D CPC_BAREMETAL): there is no firmware key table, so ESC
+; (key 66: keyboard matrix row 8, bit 2) is read with the matrix scan
+; (kscan.asm's __CPC_KSCAN_ROWS, which also leaves the PPI as the firmware
+; does and returns with interrupts on). Same calling convention and the
+; same registers preserved (BC and DE are clobbered, as in firmware mode).
+
 #include once <error.asm>
+#ifdef CPC_BAREMETAL
+#include once <io/keyboard/kscan.asm>
+#else
 #include once <fwcall.asm>
+#endif
 #include once <sysvars.asm>
 
     push namespace core
@@ -41,14 +51,22 @@ CHECK_BREAK:
     LOCAL NO_BREAK, BREAK_HIT
 
     push af             ; preserve caller's AF across this transparent check
-    push hl             ; KM_TEST_KEY corrupts HL; save the line number
+    push hl             ; the scan / KM_TEST_KEY corrupts HL; save the line number
 
+#ifdef CPC_BAREMETAL
+    ld   de, $0801      ; one row, row 8 (ESC is bit 2 of it)
+    call __CPC_KSCAN_ROWS
+    ld   a, (__CPC_KEYS + 8)
+    and  4              ; NZ = ESC down
+    pop  hl             ; recover the line number (POP does not affect flags)
+#else
     ld   a, 66          ; ESC key number (Firmware Guide, KM_TEST_KEY &BB1E)
     call .core.__FW_CALL
     defw $BB1E          ; NZ = pressed; A/HL corrupt; flags come back as
                          ; the firmware left them (fwcall.asm's contract)
 
     pop  hl             ; recover the line number (POP does not affect flags)
+#endif
     jr   nz, BREAK_HIT
 
 NO_BREAK:

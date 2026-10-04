@@ -111,20 +111,114 @@ __EPE_DONE:
 ; BC, DE, HL (the callers keep the error number and digits there).
 ; __ERR_RESET -- the machine reset after an error.
 #ifdef CPC_BAREMETAL
-; Bare-metal mode: no firmware. The screen part is txtbare.asm's glyph
-; renderer (13 = CR, 10 = LF, 32-255 drawn); the echo goes straight to the
-; printer port. Both preserve AF, BC, DE, HL.
+; Bare-metal mode: no firmware. The screen part draws with a mini font of
+; its own (the 14 glyphs of " Eor0123456789": "Error n"), so a program that
+; never PRINTs does not carry the 1.8 KB glyph table and the text code
+; (txtglyph.asm: Phase 6 B6). It uses txtbare.asm's cursor (S_POSN), cell
+; address and glyph drawing, so it follows the current mode and the pens.
+; Differences from __BT_PUTC: only those characters are drawn (others are
+; ignored), no pending wrap (a character past the last column is dropped)
+; and no scroll (a line feed on the last row stays there, the message
+; overwrites that row). The printer echo (below) is unaffected. Both
+; preserve AF, BC, DE, HL.
 __ERR_SCR:
     push af
     push bc
     push de
     push hl
-    call __BT_PUTC
+    call __ERR_PUTC
     pop  hl
     pop  de
     pop  bc
     pop  af
     ret
+__ERR_PUTC:
+    PROC
+    LOCAL __EP_CH, __EP_G, __EP_ROW
+
+    ld   hl, (__BT_PUTC_VEC)    ; the full text renderer, if this program has it
+    ld   c, a
+    ld   a, h
+    or   l
+    ld   a, c
+    jp   nz, __ERR_VEC_JP        ; (below: jp (hl)) the same output as PRINT's
+    cp   13
+    jp   z, __BT_CR
+    cp   10
+    jr   nz, __EP_CH
+    ld   a, (S_POSN + 1)
+    cp   SCR_ROWS - 1
+    ret  nc
+    inc  a
+    ld   (S_POSN + 1), a
+    ret
+__EP_CH:
+    ld   c, 0
+    cp   32
+    jr   z, __EP_G
+    inc  c
+    cp   'E'
+    jr   z, __EP_G
+    inc  c
+    cp   'r'
+    jr   z, __EP_G
+    inc  c
+    cp   'o'
+    jr   z, __EP_G
+    sub  '0'
+    cp   10
+    ret  nc
+    add  a, 4
+    ld   c, a
+__EP_G:
+    ld   a, (TXT_COLS)
+    ld   hl, S_POSN
+    cp   (hl)
+    ret  z
+    ret  c                  ; column >= TXT_COLS: dropped
+    ld   a, (S_POSN + 1)
+    cp   SCR_ROWS
+    jr   c, __EP_ROW
+    ld   a, SCR_ROWS - 1    ; a pending scroll of the glyph text: stay on row 24
+    ld   (S_POSN + 1), a
+__EP_ROW:
+    ld   l, c
+    ld   h, 0
+    add  hl, hl
+    add  hl, hl
+    add  hl, hl
+    ld   bc, __ERR_FONT
+    add  hl, bc
+    push hl
+    ld   de, (S_POSN)       ; E = column, D = row
+    call __BT_CELLADDR
+    pop  bc                 ; BC = the glyph
+    ld   a, (S_POSN)
+    inc  a
+    ld   (S_POSN), a
+    jp   __BT_DRAW
+    ENDP
+
+__ERR_VEC_JP:
+    jp   (hl)
+
+__ERR_FONT_PAD:
+    DEFS (8 - (__ERR_FONT_PAD & 7)) & 7     ; the glyphs are 8-aligned
+__ERR_FONT:
+    DEFB $00, $00, $00, $00, $00, $00, $00, $00    ; space
+    DEFB $7C, $40, $40, $78, $40, $40, $7C, $00    ; E
+    DEFB $00, $00, $58, $64, $40, $40, $40, $00    ; r
+    DEFB $00, $00, $38, $44, $44, $44, $38, $00    ; o
+    DEFB $38, $44, $4C, $54, $64, $44, $38, $00    ; 0
+    DEFB $10, $30, $10, $10, $10, $10, $38, $00    ; 1
+    DEFB $38, $44, $04, $08, $10, $20, $7C, $00    ; 2
+    DEFB $38, $44, $04, $18, $04, $44, $38, $00    ; 3
+    DEFB $08, $18, $28, $48, $7C, $08, $08, $00    ; 4
+    DEFB $7C, $40, $78, $04, $04, $44, $38, $00    ; 5
+    DEFB $38, $40, $40, $78, $44, $44, $38, $00    ; 6
+    DEFB $7C, $04, $08, $10, $20, $20, $20, $00    ; 7
+    DEFB $38, $44, $44, $38, $44, $44, $38, $00    ; 8
+    DEFB $38, $44, $44, $3C, $04, $04, $38, $00    ; 9
 __ERR_OUT:
     call __ERR_SCR
 #ifdef __CPC_PRINTER_ECHO__

@@ -92,7 +92,7 @@
 #include once <italic.asm>
 #include once <sysvars.asm>
 #ifdef CPC_BAREMETAL
-#include once <txtbare.asm>
+#include once <txtglyph.asm>
 #endif
 
     push namespace core

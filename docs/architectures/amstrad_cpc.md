@@ -408,6 +408,95 @@ belongs to the firmware.
   what STR$ prints) and stops at the first other character. It does not
   evaluate expressions: `VAL("2+2")` does not work.
 
+## Bare-metal mode
+
+`-D CPC_BAREMETAL` builds a program that never calls the firmware: the
+runtime boots the machine, handles the interrupts and does its own text,
+keyboard, sound and graphics. Use it when a program needs the RAM the
+firmware keeps, or must start without the firmware (a cartridge). The same
+source builds both ways; features that need the firmware are refused at
+compile time.
+
+### Start-up
+
+The program works whether the firmware ran first (`RUN"`) or not (a cold
+start). The boot (`runtime/bareboot.asm`) disables interrupts, pages both
+ROMs out, zeroes the private block, installs its own IM 1 handler at &0038,
+then sets the RAM configuration, the PPI, the CRTC (the standard 50 Hz
+screen at &C000), silences the AY, sets the system variable defaults, mode 1
+and the firmware's default inks, clears the screen and enables interrupts.
+
+Every interrupt goes to the frame detector: the frame counter (`Frames()`
+in `framehook.bas`) counts frames and the frame hook runs once per frame,
+as in game mode. `GameMode()` has no effect.
+
+END (and an error, after its message) resets the machine through the
+lower ROM: the firmware's cold start, or a cartridge's.
+
+### Memory map
+
+| Range | Use |
+|---|---|
+| &0040 up | Code and data |
+| up to &B7FF | Heap, top-aligned just below the stack |
+| &B800-&BBFF | Stack (SP starts at &BC00) |
+| &BC00-&BFFF | Private runtime block (system variables) |
+| &C000-&FFFF | Screen |
+
+Code, data and heap must end below &B800 (firmware mode: &9E00), so a bare
+program has 6656 bytes more room. The build stops with an error when they
+don't fit.
+
+### What the runtime does itself
+
+- **Text.** PRINT, AT, TAB, INK, PAPER, INVERSE, CLS, scrolling, UDGs,
+  `font.bas` and SCREEN$ look and behave as in firmware mode. Characters are
+  drawn from a 1792-byte glyph table (characters 32-255) in the program,
+  filled from the firmware ROM's font at start-up, so text is
+  pixel-identical. Text scrolls in software (the CRTC start address is never
+  moved). The renderer is in two parts: `txtbare.asm` (modes, pens, CLS,
+  cursor: what Mode, CLS, AT and the colours need) and `txtglyph.asm` (the
+  glyph table, PRINT and SCREEN$). A program that never PRINTs carries only
+  the first; its error messages ("Error n") are then drawn with a small font
+  of their own, without wrapping or scrolling.
+- **Keyboard.** INKEY$ (the key held now) uses the firmware's default key
+  tables, copied into the runtime, with caps lock and shift lock. INPUT
+  reads the keyboard directly with auto-repeat (0.6 s, then every 0.08 s)
+  and shows an underscore as its cursor.
+- **Sound and timing.** BEEP drives the AY directly; PAUSE and `WaitVsync`
+  count frames. PAUSE ends early on a new key press (a key already held
+  when PAUSE starts doesn't end it). `Play` works; `SoundStop` silences the
+  AY.
+- **Graphics.** PLOT, DRAW (including arcs), CIRCLE, POINT and OVER draw
+  straight into screen memory, pixel-identical to firmware mode. The 464's
+  firmware draws lines slightly differently from the 664's and 6128's; the
+  runtime looks for the 464's firmware at start-up and uses the matching
+  line algorithm (the 664/6128 one otherwise, including on a cold start).
+  `-D CPC_LINE_464` or `-D CPC_LINE_6128` chooses one at compile time.
+
+### Refused in bare mode
+
+- Anything that calls the firmware, including LOAD/SAVE and firmware calls
+  in inline assembly: the firmware gate (`.core.__FW_CALL`) does not exist,
+  so the build fails with an undefined label.
+- `SoundQueue`, `SoundFree`, `SoundBusy`, `SoundEnvelope` (the firmware's
+  sound manager): using one fails the build with an undefined label whose
+  name says it needs the firmware.
+- `-D CPC_INKEY_BUFFERED` (there is no firmware key buffer) and Play's
+  benchmark mode: `#error`.
+
+Data on disc has to be loaded before the bare program starts, by a small
+firmware-mode loader.
+
+### Cold starts
+
+On a cold start the lower ROM may not be the CPC firmware, so there is no
+font to copy: build with `-D CPC_OWNFONT` for a bundled font (characters
+32-127, with the Spectrum block graphics 128-143 and the UDGs 144-164
+starting as copies of A-U). The runtime keeps some state inside the program
+image, as Boriel's runtime does, so a program in a cartridge ROM must be
+copied to RAM before it runs.
+
 ## Differences from zx48k
 
 | Area | zx48k | cpc |

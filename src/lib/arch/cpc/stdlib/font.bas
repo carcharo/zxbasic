@@ -118,7 +118,7 @@ end sub
 #pragma pop(case_insensitive)
 
 #ifdef CPC_BAREMETAL
-#require "txtbare.asm"
+#require "txtglyph.asm"
 #else
 #require "fwcall.asm"
 #require "error.asm"

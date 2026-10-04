@@ -17,6 +17,13 @@
 #include once <fwcall.asm>
 #include once <sysvars.asm>
 
+; Bare-metal mode (-D CPC_BAREMETAL): gfxbare.asm has __GRA_PREP (the pen
+; and write mode as bytes for the pixel writer) and the pixel routines; the
+; firmware's graphics VDU is not used, so there is no __GRA_XY.
+#ifdef CPC_BAREMETAL
+#include once <gfxbare.asm>
+#else
+
     push namespace core
 
 ; __GRA_PREP -- gives the firmware the graphics pen and write mode the
@@ -94,3 +101,4 @@ __GX_LOOP:
     ENDP
 
     pop namespace
+#endif

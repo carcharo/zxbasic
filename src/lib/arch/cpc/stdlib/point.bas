@@ -19,9 +19,18 @@
 ' cursor, which the Spectrum's POINT doesn't, so the cursor is saved
 ' with GRA_ASK_CURSOR (&BBC6) and put back with GRA_MOVE_ABSOLUTE
 ' (&BBC0): a DRAW after POINT continues from the last PLOT/DRAW.
+' Bare-metal mode (-D CPC_BAREMETAL): the pixel is read from screen memory
+' (gfxbare.asm's __GR_POINT) and nothing moves the graphics cursor.
 function point(x as integer, y as integer) as ubyte
     asm
     push namespace core
+#ifdef CPC_BAREMETAL
+    ld e, (ix+4)
+    ld d, (ix+5)
+    ld l, (ix+6)
+    ld h, (ix+7)
+    call __GR_POINT
+#else
     call .core.__FW_CALL
     defw $BBC6
     push de
@@ -39,6 +48,7 @@ function point(x as integer, y as integer) as ubyte
     call .core.__FW_CALL
     defw $BBC0
     pop af
+#endif
     pop namespace
     end asm
 end function

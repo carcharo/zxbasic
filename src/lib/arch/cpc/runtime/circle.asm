@@ -164,9 +164,15 @@ __CIRC_PT:
     ld   bc, (CIRC_CX)
     add  hl, bc
     ex   de, hl             ; DE = x, HL = y
+#ifdef CPC_BAREMETAL
+    ld   (GR_CX), de        ; the cursor follows each point, as the
+    ld   (GR_CY), hl        ; firmware's does
+    call __GR_PIXEL
+#else
     call __GRA_XY
     call .core.__FW_CALL
     defw $BBEA              ; GRA_PLOT_ABSOLUTE
+#endif
     pop  hl
     pop  de
     ret

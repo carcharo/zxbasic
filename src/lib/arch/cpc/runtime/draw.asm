@@ -31,6 +31,10 @@ DRAW:
 ; (&BBEA) and GRA_MOVE_ABSOLUTE (&BBC0); plus __GRA_PREP's.
 ; Registers clobbered: AF, BC, DE, HL (main); BC', DE', HL', AF' (the
 ; gate).
+#ifdef CPC_BAREMETAL
+; Bare-metal mode: gfxbare.asm's __DRAW (same registers, no firmware).
+    jp   __DRAW
+#else
 __DRAW:
     PROC
     LOCAL __DRAW_XOR
@@ -72,5 +76,6 @@ __DRAW_XOR:
     defw $BBC0              ; GRA_MOVE_ABSOLUTE: continue from the end
     ret
     ENDP
+#endif
 
     pop namespace
