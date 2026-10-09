@@ -140,3 +140,14 @@ def test_other_archs_reject_the_pragma(tmp_path, capsys):
 
     assert zxbc.main(["--arch", "zx48k", bas, "-o", os.path.join(tmp_path, "t.bin")]) != 0
     assert "only available on --arch cpc" in capsys.readouterr().err
+
+
+def test_temporary_labels_survive_the_org_round_trip(tmp_path):
+    """The routines linked before the high data use temporary labels (1:, 1F, 1B), which the
+    assembler would otherwise forget at the ORG."""
+    source = "asm\n  ld b, 3\n1:\n  djnz 1B\n  jr 2F\n2:\nend asm\n" + _ARRAYS
+
+    rc, binary, _ = _build(tmp_path, source)
+
+    assert rc == 0
+    assert bytes([0x06, 0x03, 0x10, 0xFE, 0x18, 0x00]) in binary

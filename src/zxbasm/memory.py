@@ -54,6 +54,11 @@ class Memory:
         if value < 0 or value > self.MAX_MEM:
             error(lineno, "Memory ORG out of range [0 .. 65535]. Current value: %i" % value)
 
+        # Temporary labels are forgotten at an ORG, so resolve the references made so far
+        for filename, labels in self._tmp_pending_labels.items():
+            for label in labels:
+                self.resolve_temporary_label(filename, label)
+
         self.clear_temporary_labels()
         self.index = self.ORG = value
         self._segments.append([value, value])
