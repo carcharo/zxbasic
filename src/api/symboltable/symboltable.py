@@ -288,15 +288,17 @@ class SymbolTable:
 
         return offset
 
-    def leave_scope(self, show_warnings=True):
-        """Ends a function body and pops current scope out of the symbol table."""
+    def leave_scope(self, show_warnings=True, warn_unused_params=True):
+        """Ends a function body and pops current scope out of the symbol table.
+        Unused parameters are not reported if warn_unused_params is False (i.e. the body is inline asm).
+        """
         for v in self.current_scope.values(filter_by_opt=False):
             if not v.accessed:
                 if v.scope == SCOPE.parameter:
                     kind = "Parameter"
                     v.accessed = True  # Parameters must always be present even if not used!
                     # byref is always marked as used: it can be used to return a value
-                    if show_warnings and not v.byref:
+                    if show_warnings and warn_unused_params and not v.byref:
                         warning_not_used(v.lineno, v.name, kind=kind, fname=v.filename)
 
         for entry in self.current_scope.values(filter_by_opt=True):  # Symbols of the current level

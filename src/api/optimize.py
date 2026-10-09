@@ -5,6 +5,7 @@
 # See https://www.gnu.org/licenses/agpl-3.0.html for details.
 # --------------------------------------------------------------------
 
+import os
 import symtable
 from collections.abc import Callable, Generator
 from typing import Any, NamedTuple
@@ -84,6 +85,23 @@ class UniqueVisitor(GenericVisitor):
                 stack.extend(node.children[::-1])
 
 
+def is_library_file(fname: str) -> bool:
+    """Whether fname is under the arch stdlib/runtime dirs or any -I directory."""
+    from src.zxbpp import zxbpp
+
+    dirs = list(zxbpp.INCLUDEPATH)
+    if OPTIONS.include_path:
+        dirs.extend(OPTIONS.include_path.split(":"))
+
+    fname = src.api.utils.get_absolute_filename_path(fname)
+    for dir_ in filter(None, dirs):
+        dir_ = src.api.utils.get_absolute_filename_path(dir_)
+        if fname.startswith(dir_.rstrip(os.sep) + os.sep):
+            return True
+
+    return False
+
+
 class UnreachableCodeVisitor(UniqueVisitor):
     """Visitor to optimize unreachable code (and prune it)."""
 
@@ -97,7 +115,9 @@ class UnreachableCodeVisitor(UniqueVisitor):
             # String functions must *ALWAYS* return a value.
             # Put a sentinel ("dummy") return "" sentence that will be removed if other is detected
             lineno = node.lineno if not node.body else node.body[-1].lineno
-            errmsg.warning_function_should_return_a_value(lineno, node.name, node.filename)
+            # A body ending in inline asm returns its value in registers: no warning (the sentinel stays)
+            if not node.body or node.body[-1].token != "ASM":
+                errmsg.warning_function_should_return_a_value(lineno, node.name, node.filename)
             type_ = node.type_
             if type_ is not None and type_ == self.TYPE(TYPE.string) and node.convention != CONVENTION.fastcall:
                 node.body.append(symbols.ASM("\nld hl, 0\n", lineno, node.filename, is_sentinel=True))
@@ -303,7 +323,8 @@ class OptimizerVisitor(UniqueVisitor):
 
     def visit_FUNCDECL(self, node):
         if self.O_LEVEL > 1 and not node.entry.accessed:
-            errmsg.warning_func_is_never_called(node.entry.lineno, node.entry.name, fname=node.entry.filename)
+            if not is_library_file(node.entry.filename):
+                errmsg.warning_func_is_never_called(node.entry.lineno, node.entry.name, fname=node.entry.filename)
             yield self.NOP
             return
 

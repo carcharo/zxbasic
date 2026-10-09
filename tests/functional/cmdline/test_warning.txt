@@ -15,3 +15,12 @@ doloop2.bas:4: warning: [W150] Variable 'a' is never used
 
 >>> process_file('arch/zx48k/letsubstr_undecl.bas', ['-S', '-q'])
 letsubstr_undecl.bas:1: warning: [W101] Accessing uninitialized string variable 'S'
+
+# Parameters used only from inline asm are not reported, others are
+>>> process_file('arch/zx48k/warn_asm_params.bas', ['-S', '-q'])
+warn_asm_params.bas:7: warning: [W150] Parameter 'x' is never used
+
+# Functions ending in inline asm return a value in registers
+>>> process_file('arch/zx48k/warn_asm_return.bas', ['-S', '-q'])
+warn_asm_return.bas:7: warning: [W190] Function 'basNoRet' should return a value
+warn_asm_return.bas:8: warning: [W150] Variable 'a' is never used

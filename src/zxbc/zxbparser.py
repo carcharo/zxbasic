@@ -47,6 +47,7 @@ from src.api.global_ import LoopInfo
 
 # Compiler API
 from src.api.symboltable.symboltable import SymbolTable
+from src.ast_ import Ast
 
 # Lexers and parsers, etc
 from src.symbols import sym
@@ -105,6 +106,24 @@ last_brk_linenum: int = 0
 # ----------------------------------------------------------------------
 # Start of parsing
 # ----------------------------------------------------------------------
+
+
+def has_asm(node) -> bool:
+    """Returns whether the given tree contains an inline ASM sentence."""
+    visited = set()
+    stack = [node]
+    while stack:
+        node = stack.pop()
+        if not isinstance(node, Ast) or id(node) in visited:
+            continue
+
+        visited.add(id(node))
+        if node.token == "ASM":
+            return True
+
+        stack.extend(node.children)
+
+    return False
 
 
 class Id(NamedTuple):
@@ -2625,7 +2644,8 @@ class ZXBasicTransformer(Transformer):
             return p0
         p0 = items[0]
         p0.local_symbol_table = SYMBOL_TABLE.current_scope
-        p0.locals_size = SYMBOL_TABLE.leave_scope()
+        # Inline asm can use the parameters (i.e. via (IX + n)) where the compiler can't see it
+        p0.locals_size = SYMBOL_TABLE.leave_scope(warn_unused_params=not has_asm(items[1]))
         FUNCTION_LEVEL.pop()
         p0.entry.ref.body = items[1]
         p0.local_symbol_table.owner = p0
