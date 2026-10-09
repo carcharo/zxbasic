@@ -106,6 +106,12 @@ esac
 echo "run.sh: packaging $BIN_ABS -> $DSK_ABS"
 python3 "$MKDSK" -o "$DSK_ABS" --load "$LOAD_ADDR" --exec "$LOAD_ADDR" --name "$AMSDOS_STEM.BIN" "$BIN_ABS"
 
+# cpcbuild's patched Caprice32 (tools/caprice32 there: the stock one writes
+# the Plus ASIC's DCSR/DMA registers into RAM) if built, else the sibling clone
+PATCHED_CAP32="$REPO_ROOT/../cpcbuild/tools/caprice32/work/src/cap32"
+if [[ -z "${CAP32:-}" && -x "$PATCHED_CAP32" ]]; then
+    CAP32="$PATCHED_CAP32"
+fi
 CAP32="${CAP32:-$REPO_ROOT/../caprice32/cap32}"
 
 # CPC_MODEL=464|664|6128 (default 6128). A 464 gets the DDI-1 disc ROM
