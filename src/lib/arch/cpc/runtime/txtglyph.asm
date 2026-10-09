@@ -314,7 +314,9 @@ __BP_DRAW:
     ld   a, (TXT_COLS)
     ld   hl, S_POSN
     cp   (hl)
+    jr   c, __BP_WRAP       ; column > TXT_COLS (should not happen): wrap too, don't run off the screen
     jr   nz, __BP_NOWRAP    ; column < TXT_COLS: no wrap pending
+__BP_WRAP:
     call __BT_CR
     call __BT_LF
 __BP_NOWRAP:
