@@ -102,6 +102,18 @@ and the heap must lie above &7FFF, or the build fails with `compiled code+data .
 unaffected. Backends declare such ranges with `RESERVED_RANGE_LABELS`, checked in
 `check_memory_layout` in `zxbc.py`.
 
+**Data above the program: `#pragma hidata`.** `#pragma hidata = <address>`
+(decimal, `0x..` or `$..`) places the data bytes of the initialised global
+arrays declared after it (`DIM a(n) AS UBYTE => {...}`) at that address and
+upward, one after the other; `#pragma hidata = 0` turns it off. The arrays'
+descriptors stay with the program and are used as usual (like `DIM ... AT`).
+The backend's epilogue assembles each block with an `org <address>` and an
+`org` back, so the output is still one binary with the gap zero-filled. The
+memory check looks at each ORG segment on its own: the high data must clear
+the reserved ranges, the heap and `MAX_CODE_ADDRESS` too. Typical use is a
+program that reserves &4000-&7FFF: its graphics go to &8000 up to the heap
+(&8B60 by default). Other architectures reject the pragma.
+
 **Central 32K.** While the firmware runs, the lower ROM (&0000-&3FFF) and, for
 some calls, the upper ROM (&C000-&FFFF) are paged in for reading. Anything the
 firmware reads through a pointer, and the stack, must therefore be in
