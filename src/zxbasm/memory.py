@@ -40,6 +40,9 @@ class Memory:
         # This will store corresponding asm instructions
         self.orgs: dict[int, list[Asm]] = {}
 
+        # [start, end) of the bytes assembled after each ORG (see segments())
+        self._segments: list[list[int]] = [[org, org]]
+
     def enter_proc(self, lineno: int):
         """Enters (pushes) a new context"""
         self.local_labels.append({})  # Add a new context
@@ -53,6 +56,20 @@ class Memory:
 
         self.clear_temporary_labels()
         self.index = self.ORG = value
+        self._segments.append([value, value])
+
+    def segments(self) -> list[tuple[int, int]]:
+        """Returns the (start, end) address ranges, end exclusive and sorted by start, that
+        were assembled after each ORG. Touching or overlapping ones are merged, and empty ones dropped.
+        """
+        result: list[list[int]] = []
+        for start, end in sorted(seg for seg in self._segments if seg[1] > seg[0]):
+            if result and start <= result[-1][1]:
+                result[-1][1] = max(result[-1][1], end)
+            else:
+                result.append([start, end])
+
+        return [(start, end) for start, end in result]
 
     @staticmethod
     def id_name(label: str, namespace: str | None = None) -> tuple[str, str]:
@@ -87,6 +104,7 @@ class Memory:
 
         self.memory_bytes[self.org] = byte
         self.index += 1  # Increment current memory pointer
+        self._segments[-1][1] = max(self._segments[-1][1], self.index)
 
     def exit_proc(self, lineno: int):
         """Exits current procedure. Local labels are transferred to global

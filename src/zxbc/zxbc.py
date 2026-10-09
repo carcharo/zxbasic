@@ -10,7 +10,7 @@
 import re
 import sys
 from argparse import Namespace
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from io import StringIO
 
 import src.api.optimize
@@ -74,7 +74,14 @@ def save_config(options: Namespace) -> None:
         src.api.config.save_config_into_file(options.save_config, src.api.config.ConfigSections.ZXBC)
 
 
-def check_memory_layout(backend, heap_in_use: bool, org: int, length: int, labels: Collection[str] = ()) -> None:
+def check_memory_layout(
+    backend,
+    heap_in_use: bool,
+    org: int,
+    length: int,
+    labels: Collection[str] = (),
+    segments: Sequence[tuple[int, int]] = (),
+) -> None:
     """Post-assembly sanity check for the compiled binary's memory layout.
 
     zxbasm's assembler only ever sees a stream of instructions -- it has
@@ -100,52 +107,64 @@ def check_memory_layout(backend, heap_in_use: bool, org: int, length: int, label
         empty by default) reserves [start, end) whenever that label is
         defined -- i.e. only in programs that link the runtime code
         defining it -- and neither code+data nor the heap may overlap it.
+    :param segments: the (start, end) ranges, end exclusive, assembled after
+        each ORG (see Memory.segments()). The first is the main program;
+        any others are data placed elsewhere (#pragma hidata), which
+        must clear the reserved ranges, the heap and the memory limit
+        too. By default the whole binary is the one segment.
     """
-    end = org + length  # first address past the compiled binary
+    if not segments:
+        segments = [(org, org + length)]
+
     heap_address = OPTIONS.heap_address if heap_in_use else None
     heap_used = heap_address is not None
+    heap_end = heap_address + OPTIONS.heap_size if heap_used else 0
 
-    for label, (start, stop, reason) in getattr(backend, "RESERVED_RANGE_LABELS", {}).items():
-        if label not in labels:
-            continue
-        if org < stop and start < end:
+    for index, (seg_start, end) in enumerate(segments):  # end: first address past the segment
+        what = "compiled code+data" if index == 0 else "data placed at"
+        span = "(0x%04X-0x%04X)" % (seg_start, end - 1) if index == 0 else "0x%04X-0x%04X" % (seg_start, end - 1)
+        for label, (start, stop, reason) in getattr(backend, "RESERVED_RANGE_LABELS", {}).items():
+            if label in labels and seg_start < stop and start < end:
+                errmsg.error(
+                    0,
+                    "%s %s overlaps 0x%04X-0x%04X, reserved because %s" % (what, span, start, stop - 1, reason),
+                )
+
+        max_code_address = backend.MAX_CODE_ADDRESS
+        if max_code_address is not None and end > max_code_address:
             errmsg.error(
                 0,
-                "compiled code+data (0x%04X-0x%04X) overlaps 0x%04X-0x%04X, reserved because %s"
-                % (org, end - 1, start, stop - 1, reason),
+                "%s ends at 0x%04X, past this architecture's memory limit of 0x%04X" % (what, end, max_code_address),
             )
-        if heap_used and heap_address < stop and start < heap_address + OPTIONS.heap_size:
+
+        if heap_used and seg_start < heap_end and heap_address < end:  # [seg_start, end) and [heap, heap_end) intersect
+            errmsg.error(
+                0,
+                "%s %s overlaps the heap (0x%04X-0x%04X)%s"
+                % (
+                    what,
+                    span,
+                    heap_address,
+                    heap_end - 1,
+                    "" if index == 0 else ": move the data, or the heap (--heap-address, --heap-size)",
+                ),
+            )
+
+    for label, (start, stop, reason) in getattr(backend, "RESERVED_RANGE_LABELS", {}).items():
+        if label in labels and heap_used and heap_address < stop and start < heap_end:
             errmsg.error(
                 0,
                 "the heap (0x%04X-0x%04X) overlaps 0x%04X-0x%04X, reserved because %s"
-                % (heap_address, heap_address + OPTIONS.heap_size - 1, start, stop - 1, reason),
+                % (heap_address, heap_end - 1, start, stop - 1, reason),
             )
 
+    org = segments[0][0]
     min_code_address = getattr(backend, "MIN_CODE_ADDRESS", None)
     if min_code_address is not None and org < min_code_address:
         errmsg.error(
             0,
             "origin 0x%04X is below this architecture's lowest usable address of 0x%04X%s"
             % (org, min_code_address, " (%s)" % backend.MIN_CODE_REASON if backend.MIN_CODE_REASON else ""),
-        )
-
-    max_code_address = backend.MAX_CODE_ADDRESS
-    if max_code_address is not None and end > max_code_address:
-        errmsg.error(
-            0,
-            "compiled code+data ends at 0x%04X, past this architecture's "
-            "memory limit of 0x%04X" % (end, max_code_address),
-        )
-
-    if not heap_used:
-        return
-
-    heap_end = heap_address + OPTIONS.heap_size
-    if org < heap_end and heap_address < end:  # [org, end) and [heap, heap_end) intersect
-        errmsg.error(
-            0,
-            "compiled code+data (0x%04X-0x%04X) overlaps the heap "
-            "(0x%04X-0x%04X)" % (org, end - 1, heap_address, heap_end - 1),
         )
 
 
@@ -325,7 +344,7 @@ def main(args=None, emitter=None) -> int:
             org, binary = memory.dump()
             if gl.has_errors:
                 return 5  # Error in assembly
-            check_memory_layout(backend, heap_in_use, org, len(binary), memory.global_labels.keys())
+            check_memory_layout(backend, heap_in_use, org, len(binary), memory.global_labels.keys(), memory.segments())
             if gl.has_errors:
                 return 5  # Memory layout error (heap overlap or past arch limit)
 

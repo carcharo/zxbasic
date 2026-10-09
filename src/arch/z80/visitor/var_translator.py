@@ -9,6 +9,7 @@ import src.api
 from src.api import global_ as gl
 from src.api.config import OPTIONS
 from src.arch.z80 import Translator
+from src.arch.z80.backend import common
 from src.arch.z80.visitor.translator_visitor import TranslatorVisitor
 from src.symbols import sym as symbols
 
@@ -44,7 +45,6 @@ class VarTranslator(TranslatorVisitor):
 
     def visit_ARRAYDECL(self, node):
         entry = node.entry
-        assert entry.default_value is None or entry.addr is None, "Cannot use address and default_value at once"
 
         if not entry.accessed:
             src.api.errmsg.warning_not_used(entry.lineno, entry.name, fname=entry.filename)
@@ -74,6 +74,8 @@ class VarTranslator(TranslatorVisitor):
         if entry.addr:
             addr = self.traverse_const(entry.addr) if isinstance(entry.addr, symbols.SYMBOL) else entry.addr
             self.ic_deflabel(data_label, "%s" % addr)
+            if entry.default_value is not None:  # data placed by #pragma hidata
+                common.HIDATA.append((int(addr), Translator.array_default_value(node.type_, entry.default_value)))
         else:
             if entry.default_value is not None:
                 arr_data = Translator.array_default_value(node.type_, entry.default_value)

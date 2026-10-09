@@ -70,6 +70,7 @@ class TestConfig(unittest.TestCase):
             config.OPTION.EXPECTED_WARNINGS,
             config.OPTION.EXPLICIT,
             config.OPTION.FORCE_ASM_BRACKET,
+            config.OPTION.HIDATA,
             config.OPTION.HIDE_WARNING_CODES,
             config.OPTION.INCLUDE_PATH,
             config.OPTION.INPUT_FILENAME,

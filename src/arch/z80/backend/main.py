@@ -148,6 +148,11 @@ class Backend(BackendInterface):
     _QUAD_TABLE: dict[str, ICInfo] = {}
     MEMORY: list[Quad] = []  # Must be initialized by with init()
 
+    # Options that must not be enabled on this arch -> why (see the cpc backend)
+    UNSUPPORTED_OPTIONS = {
+        "hidata": "#pragma hidata (initialised array data placed at a fixed address) is only available on --arch cpc",
+    }
+
     # Absolute upper bound (exclusive) for compiled code+data, in address
     # space, or None if this architecture imposes none beyond the generic
     # 64K limit. Checked by zxbc's post-assembly memory-layout check

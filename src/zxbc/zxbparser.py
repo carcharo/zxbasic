@@ -39,7 +39,7 @@ from src.api.check import (
     is_string,
     is_unsigned,
 )
-from src.api.config import OPTIONS
+from src.api.config import OPTION, OPTIONS
 from src.api.constants import CLASS, CONVENTION, SCOPE, TYPE, LoopType
 from src.api.debug import __DEBUG__
 from src.api.errmsg import error, warning
@@ -64,6 +64,9 @@ from .zxbparser_standalone import Lark_StandAlone, Lexer, Token, Transformer, Un
 # is empty, we are at global scope
 # ----------------------------------------------------------------------
 FUNCTION_LEVEL: list[SymbolID] = gl.FUNCTION_LEVEL
+
+# Next free address for the data of initialised global arrays while #pragma hidata is active
+HIDATA_CURSOR = [0]
 
 # ----------------------------------------------------------------------
 # Function calls pending to check
@@ -146,6 +149,7 @@ def init():
     global last_brk_linenum
 
     LABELS = {}
+    HIDATA_CURSOR[0] = 0
     LET_ASSIGNMENT = False
     PRINT_IS_USED = False
     last_brk_linenum = 0
@@ -925,6 +929,14 @@ class ZXBasicTransformer(Transformer):
         if items[5] == Type.string or entry.type_ == Type.string:
             errmsg.syntax_error_cannot_initialize_array_of_type(get_lineno(items[0]), Type.string)
             return p0
+
+        if OPTIONS.hidata and entry.scope == SCOPE.global_:  # place the array's data at the hidata cursor
+            addr = HIDATA_CURSOR[0]
+            HIDATA_CURSOR[0] += entry.ref.size
+            if HIDATA_CURSOR[0] > 0x10000:
+                error(lineno, "#pragma hidata: array '%s' does not fit below 0x10000" % id_)
+                return p0
+            entry.addr = make_typecast(_TYPE(gl.PTR_TYPE), make_number(addr, lineno=lineno), lineno)
 
         return p0
 
@@ -2883,6 +2895,8 @@ class ZXBasicTransformer(Transformer):
         p0 = None
         try:
             setattr(OPTIONS, items[1], items[3])
+            if items[1] == OPTION.HIDATA:
+                HIDATA_CURSOR[0] = OPTIONS.hidata
             reason = getattr(arch.target.backend.Backend, "UNSUPPORTED_OPTIONS", {}).get(items[1])
             if reason and OPTIONS[items[1]].value:
                 errmsg.error(get_lineno(items[1]), reason)
@@ -2903,6 +2917,8 @@ class ZXBasicTransformer(Transformer):
         p0 = None
         try:
             OPTIONS[items[3]].pop()
+            if items[3] == OPTION.HIDATA:
+                HIDATA_CURSOR[0] = OPTIONS.hidata
         except src.api.options.UndefinedOptionError:
             errmsg.warning_ignoring_unknown_pragma(get_lineno(items[3]), items[3])
         return p0

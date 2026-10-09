@@ -6,7 +6,9 @@
 from src.api.config import OPTIONS
 from src.arch.z80.backend import Backend as Z80Backend
 from src.arch.z80.backend import ICInfo, common
+from src.arch.z80.backend.generic import _vard
 from src.arch.z80.backend.icinstruction import ICInstruction
+from src.arch.z80.backend.quad import Quad
 from src.arch.z80.backend.runtime import NAMESPACE
 from src.arch.z80.peephole import engine
 
@@ -215,6 +217,13 @@ class Backend(Z80Backend):
     @staticmethod
     def emit_epilogue() -> list[str]:
         output = list(common.AT_END)
+        # Data of #pragma hidata arrays: each block is assembled at its address, then
+        # the origin goes back, so ZXBASIC_USER_DATA_LEN and the code are unaffected.
+        for i, (addr, data) in enumerate(common.HIDATA):
+            output.append(f"__HIDATA_BACK_{i}:")
+            output.append(f"org {addr}")
+            output.extend(_vard(Quad(ICInstruction.VARD, f"__HIDATA_{i}", repr(data)))[1:])
+            output.append(f"org __HIDATA_BACK_{i}")
         if OPTIONS.autorun:
             output.append(f"END {common.START_LABEL}")
         else:

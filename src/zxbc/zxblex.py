@@ -501,7 +501,11 @@ def t_preproc_NEWLINE(t):
 
 
 def t_preproc_INTEGER(t):
-    r"[0-9]+"
+    r"0[xX][0-9a-fA-F]+|\$[0-9a-fA-F]+|[0-9]+"
+    if t.value[0] == "$":
+        t.value = str(int(t.value[1:], 16))
+    elif t.value[:2] in ("0x", "0X"):
+        t.value = str(int(t.value[2:], 16))
 
     return t
 

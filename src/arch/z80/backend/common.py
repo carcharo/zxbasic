@@ -103,6 +103,9 @@ FLAG_end_emitted = False
 # This will be appended at the end of code emission (useful for lvard, for example)
 AT_END = []
 
+# (address, data) of initialised arrays whose data is placed away from the program (#pragma hidata)
+HIDATA: list[tuple[int, list[str]]] = []
+
 # A table with ASM block entered by the USER (these won't be optimized)
 ASMS = {}
 ASMCOUNT = 0  # ASM blocks counter
@@ -253,6 +256,7 @@ def init() -> None:
     INITS.clear()
     ASMS.clear()
     AT_END.clear()
+    HIDATA.clear()
 
     FLAG_use_function_exit = False
     FLAG_end_emitted = False

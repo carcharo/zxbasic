@@ -77,6 +77,10 @@ class OPTION(StrEnum):
     EXPECTED_WARNINGS = "expected_warnings"
     HIDE_WARNING_CODES = "hide_warning_codes"
 
+    # #pragma hidata = <address>: where the data of the initialised global arrays
+    # declared from now on is placed (0 = not used). Only on --arch cpc.
+    HIDATA = "hidata"
+
     # Names (a subset of "org", "heap_size", "heap_address") explicitly set
     # from the command line, as opposed to only carrying a backend's
     # ADD_IF_NOT_DEFINED default. See src.zxbc.args_config.parse_options.
@@ -240,6 +244,8 @@ def init() -> None:
     # Empty unless zxbc.args_config.parse_options() sets it. Safe to read
     # (evaluates to an empty frozenset) even when parse_options() never runs.
     OPTIONS(Action.ADD, name=OPTION.CLI_OVERRIDES, type=frozenset, default=frozenset(), ignore_none=True)
+
+    OPTIONS(Action.ADD, name=OPTION.HIDATA, type=int, default=0, ignore_none=True)
 
     # Whether to show WXXX warning codes or not
     OPTIONS(Action.ADD, name=OPTION.HIDE_WARNING_CODES, type=bool, default=False, ignore_none=True)

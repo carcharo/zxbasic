@@ -320,7 +320,7 @@ class Lexer(BaseLexer):
         return t
 
     def t_prepro_pragma_INTEGER(self, t):
-        r"[0-9]+"  # an integer number
+        r"0[xX][0-9a-fA-F]+|\$[0-9a-fA-F]+|[0-9]+"  # an integer number (decimal, 0x.. or $.. hexadecimal)
         return t
 
     def t_INITIAL_pragma_prepro_defexpr_asm_if_STRING(self, t):
