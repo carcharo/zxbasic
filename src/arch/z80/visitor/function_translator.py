@@ -172,3 +172,4 @@ class FunctionTranslator(Translator):
     def visit_FUNCDECL(self, node):
         """Nested scope functions"""
         self.functions.append(node.entry)
+        backend.REQUIRES.update(node.entry.ref.requires)

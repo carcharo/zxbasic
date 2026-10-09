@@ -23,6 +23,7 @@ from src.api.exception import (
     InvalidOperatorError,
 )
 from src.api.global_ import optemps
+from src.arch.z80 import backend
 from src.arch.z80.backend._float import Float
 from src.arch.z80.backend.runtime import Labels as RuntimeLabel
 from src.arch.z80.visitor.builtin_translator import BuiltinTranslator
@@ -194,6 +195,7 @@ class Translator(TranslatorVisitor):
     def visit_FUNCDECL(self, node):
         # Delay emission of functions until the end of the main code
         gl.FUNCTIONS.append(node.entry)
+        backend.REQUIRES.update(node.entry.ref.requires)
 
     def visit_CALL(self, node: symbols.CALL):
         yield self.visit(node.args)  # arglist

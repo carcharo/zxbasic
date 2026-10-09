@@ -2872,7 +2872,11 @@ class ZXBasicTransformer(Transformer):
 
     def preproc_line_require(self, meta, items):
         p0 = None
-        arch.target.backend.REQUIRES.add(items[1])
+        if FUNCTION_LEVEL and hasattr(FUNCTION_LEVEL[-1].ref, "requires"):
+            # Inside a SUB/FUNCTION: applies only if the routine is emitted (see Translator.visit_FUNCDECL)
+            FUNCTION_LEVEL[-1].ref.requires.add(items[1])
+        else:
+            arch.target.backend.REQUIRES.add(items[1])
         return p0
 
     def preproc_line_pragma_option(self, meta, items):
