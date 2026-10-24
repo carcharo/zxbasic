@@ -1,0 +1,275 @@
+# Builds standalone (no Python needed) ZX BASIC / CPC compiler bundles with
+# PyInstaller for five platforms, smoke-tests them, and (tags only) publishes
+# a GitHub pre-release.
+#
+# Triggers:
+#   * push of a tag matching v*-cpc.*   -> build, smoke, sign (macOS), release
+#   * push to release-* / workflow_dispatch -> build, smoke, upload artifacts only
+#
+# macOS signing / notarisation is skipped (with a warning) unless these
+# repository secrets are set:
+#   APPLE_CERT_P12_BASE64  Developer ID Application certificate + key (.p12), base64
+#   APPLE_CERT_PASSWORD    password of the .p12
+#   APPLE_TEAM_ID          10-character Apple team id
+#   APPLE_API_KEY_P8       App Store Connect API key (.p8 file contents)
+#   APPLE_API_KEY_ID       its key id
+#   APPLE_API_ISSUER_ID    its issuer id
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*-cpc.*"
+    # release-* branches: build + smoke + artifacts (workflow_dispatch needs the file on main)
+    branches:
+      - "release-*"
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: 3.14.3
+  PYINSTALLER_VERSION: 6.22.3
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: windows-x64, os: windows-latest, archive: zip }
+          # ubuntu-22.04 on purpose: glibc 2.35, so the bundle also runs on older distros
+          - { platform: linux-x64, os: ubuntu-22.04, archive: tar.gz }
+          - { platform: linux-arm64, os: ubuntu-24.04-arm, archive: tar.gz }
+          - { platform: macos-arm64, os: macos-14, archive: zip }
+          # macos-15-intel is the last Intel macOS runner label (macos-13 was retired
+          # in Dec 2025, and GitHub ends Intel macOS runners in Aug 2027).
+          - { platform: macos-x64, os: macos-15-intel, archive: zip }
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install poetry and dependencies
+        run: |
+          pip install -U pip~=26.0
+          pip install poetry~=2.3.2
+          poetry config virtualenvs.in-project true
+          poetry install --only main
+          # PyInstaller is deliberately not in pyproject.toml / poetry.lock
+          poetry run pip install pyinstaller==${{ env.PYINSTALLER_VERSION }}
+
+      - name: Work out the version string
+        id: ver
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            BASE=$(poetry run python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+            VERSION="${BASE}-dev-${GITHUB_SHA::7}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}"
+
+      - name: Build with PyInstaller
+        run: poetry run pyinstaller --noconfirm --distpath dist --workpath build/pyi packaging/zxbasic.spec
+
+      - name: Smoke test (unsigned build)
+        run: poetry run python packaging/smoke.py --frozen dist/zxbasic
+
+      # ------------------------------------------------------------------
+      # macOS: Developer ID signing. Skipped with a warning when the secrets
+      # are not configured.
+      # ------------------------------------------------------------------
+      - name: Check for Apple signing secrets
+        id: apple
+        if: runner.os == 'macOS'
+        env:
+          CERT: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          CERT_PW: ${{ secrets.APPLE_CERT_PASSWORD }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          if [[ -n "$CERT" && -n "$CERT_PW" && -n "$TEAM" && -n "$KEY" && -n "$KEY_ID" && -n "$ISSUER" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Apple signing secrets are not (all) set: macOS binaries are NOT signed or notarised. Users will have to clear the quarantine flag (xattr -dr com.apple.quarantine zxbasic)."
+          fi
+
+      - name: Import signing certificate into a temporary keychain
+        if: steps.apple.outputs.enabled == 'true'
+        env:
+          CERT: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          CERT_PW: ${{ secrets.APPLE_CERT_PASSWORD }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PW="$(uuidgen)"
+          echo "$CERT" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PW" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PW" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          # SHA-1 of the Developer ID Application identity belonging to our team
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | grep "Developer ID Application" | grep "($TEAM)" | head -1 | awk '{print $2}')
+          if [[ -z "$IDENTITY" ]]; then
+            echo "::error::No 'Developer ID Application' identity for team $TEAM in the imported certificate"
+            exit 1
+          fi
+          echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Sign every Mach-O file (inside-out, hardened runtime)
+        if: steps.apple.outputs.enabled == 'true'
+        run: |
+          cd dist/zxbasic
+          # 1. libraries and extension modules, deepest paths first
+          # 2. the four executables last
+          find . -type f ! -name zxbc ! -name zxbasm ! -name zxbpp ! -name mkdsk -print0 \
+            | while IFS= read -r -d '' f; do
+                if file -b "$f" | grep -q "Mach-O"; then echo "$f"; fi
+              done \
+            | awk '{ n = gsub("/", "/"); print n "\t" $0 }' | sort -rn | cut -f2- \
+            | while IFS= read -r f; do
+                echo "sign $f"
+                codesign --force --options runtime --timestamp --keychain "$KEYCHAIN" --sign "$SIGN_IDENTITY" "$f"
+              done
+          for exe in zxbc zxbasm zxbpp mkdsk; do
+            echo "sign $exe"
+            codesign --force --options runtime --timestamp --keychain "$KEYCHAIN" --sign "$SIGN_IDENTITY" "$exe"
+          done
+          # verify everything we touched
+          for exe in zxbc zxbasm zxbpp mkdsk; do codesign --verify --strict --verbose=2 "$exe"; done
+          find . -type f -print0 | while IFS= read -r -d '' f; do
+            if file -b "$f" | grep -q "Mach-O"; then codesign --verify --strict "$f"; fi
+          done
+
+      - name: Smoke test (signed build)
+        if: steps.apple.outputs.enabled == 'true'
+        run: poetry run python packaging/smoke.py --frozen dist/zxbasic
+
+      # ------------------------------------------------------------------
+      # Archive
+      # ------------------------------------------------------------------
+      - name: Create archive
+        id: pack
+        env:
+          NAME: zxbasic-${{ steps.ver.outputs.version }}-${{ matrix.platform }}
+        run: |
+          mkdir -p out
+          ARCHIVE="out/${NAME}.${{ matrix.archive }}"
+          cd dist
+          case "${{ matrix.archive }}" in
+            tar.gz) tar -czf "../${ARCHIVE}" zxbasic ;;
+            zip)
+              if [[ "$RUNNER_OS" == "macOS" ]]; then
+                ditto -c -k --keepParent zxbasic "../${ARCHIVE}"   # keeps exec bits and signatures
+              else
+                powershell -NoProfile -Command "Compress-Archive -Path zxbasic -DestinationPath '../${ARCHIVE}'"
+              fi ;;
+          esac
+          cd ..
+          echo "archive=${ARCHIVE}" >> "$GITHUB_OUTPUT"
+          ls -l "${ARCHIVE}"
+
+      - name: Notarise (macOS)
+        if: steps.apple.outputs.enabled == 'true'
+        env:
+          KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
+          ARCHIVE: ${{ steps.pack.outputs.archive }}
+        run: |
+          printf '%s' "$KEY" > "$RUNNER_TEMP/AuthKey.p8"
+          xcrun notarytool submit "$ARCHIVE" \
+            --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$KEY_ID" --issuer "$ISSUER" \
+            --wait --output-format json | tee "$RUNNER_TEMP/notary.json"
+          STATUS=$(python3 -c "import json,sys;print(json.load(open('$RUNNER_TEMP/notary.json')).get('status',''))")
+          ID=$(python3 -c "import json,sys;print(json.load(open('$RUNNER_TEMP/notary.json')).get('id',''))")
+          if [[ "$STATUS" != "Accepted" ]]; then
+            echo "::error::Notarisation finished with status '$STATUS'"
+            xcrun notarytool log "$ID" --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$KEY_ID" --issuer "$ISSUER" || true
+            exit 1
+          fi
+          # Bare executables and zip files cannot be stapled: Gatekeeper checks
+          # the notarisation ticket online on first run. Do not fail on this.
+          xcrun stapler staple "$ARCHIVE" || echo "(stapling is not possible for a zip of bare executables; expected)"
+
+      - name: Remove signing material
+        if: always() && runner.os == 'macOS'
+        run: |
+          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/cert.p12"
+          if [[ -n "${KEYCHAIN:-}" ]]; then security delete-keychain "$KEYCHAIN" || true; fi
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: zxbasic-${{ matrix.platform }}
+          path: ${{ steps.pack.outputs.archive }}
+          if-no-files-found: error
+
+  release:
+    name: Publish pre-release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all archives
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: zxbasic-*
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd artifacts
+          sha256sum zxbasic-* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Write release notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          cat > notes.md <<NOTES
+          Standalone builds of the ZX BASIC compiler fork with the Amstrad CPC backend (\`zxbc\`, \`zxbasm\`, \`zxbpp\`, \`mkdsk\`). No Python needed: unpack and run \`zxbasic/zxbc\`.
+
+          Built from source tag \`${TAG}\` of ${GITHUB_REPOSITORY} (commit ${GITHUB_SHA}) with PyInstaller ${PYINSTALLER_VERSION}.
+
+          Platforms: windows-x64, linux-x64 (glibc 2.35 or newer), linux-arm64, macos-arm64, macos-x64. Verify downloads with \`SHA256SUMS\`.
+
+          macOS builds are signed and notarised only when the release was built with the Apple secrets configured; otherwise run \`xattr -dr com.apple.quarantine zxbasic\` after unpacking.
+
+          The source code is licensed under the GNU AGPL-3.0 (or later). The complete corresponding source for this release is the source archive GitHub attaches to this release (Source code zip / tar.gz) for tag \`${TAG}\`.
+          NOTES
+
+      - name: Create pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" artifacts/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --prerelease \
+            --title "ZX BASIC (CPC) ${TAG}" \
+            --notes-file notes.md
