@@ -41,6 +41,8 @@ jobs:
       matrix:
         include:
           - { platform: windows-x64, os: windows-latest, archive: zip }
+          # native Windows on ARM: ~3.5x faster than the x64 build under emulation
+          - { platform: windows-arm64, os: windows-11-arm, archive: zip }
           # ubuntu-22.04 on purpose: glibc 2.35, so the bundle also runs on older distros
           - { platform: linux-x64, os: ubuntu-22.04, archive: tar.gz }
           - { platform: linux-arm64, os: ubuntu-24.04-arm, archive: tar.gz }
@@ -255,7 +257,7 @@ jobs:
 
           Built from source tag \`${TAG}\` of ${GITHUB_REPOSITORY} (commit ${GITHUB_SHA}) with PyInstaller ${PYINSTALLER_VERSION}.
 
-          Platforms: windows-x64, linux-x64 (glibc 2.35 or newer), linux-arm64, macos-arm64, macos-x64. Verify downloads with \`SHA256SUMS\`.
+          Platforms: windows-x64, windows-arm64, linux-x64 (glibc 2.35 or newer), linux-arm64, macos-arm64, macos-x64. Verify downloads with \`SHA256SUMS\`.
 
           macOS builds are signed and notarised only when the release was built with the Apple secrets configured; otherwise run \`xattr -dr com.apple.quarantine zxbasic\` after unpacking.
 
